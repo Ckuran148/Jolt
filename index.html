@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Jolt Operations Dashboard</title>
     <link rel="stylesheet" href="jolt_styles.css">
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -52,12 +55,29 @@
                 </button>
                 
             </div>
+            <div id="nav-admin-section" class="nav-section" style="display:none;">
+            <div class="nav-header">Admin Controls</div>
+             <button id="nav-admin" class="nav-btn" onclick="switchTab('admin')">
+              <span class="icon">⚙️</span> <span class="label">Control Panel</span>
+             </button>
+            </div>
 
         </nav>
 
         <div class="sidebar-footer">
-            <button onclick="document.getElementById('configModal').style.display='flex'" class="config-trigger">⚙️ Settings</button>
-        </div>
+    <button onclick="handleLogout()" class="config-trigger" style="
+    background-color: #fff; 
+    color: #dc2626; 
+    border: 1px solid #dc2626; 
+    margin-bottom: 10px; 
+    font-weight: bold;">
+    🚪 Log Out
+</button>
+    
+    <button onclick="document.getElementById('configModal').style.display='flex'" class="config-trigger">
+        ⚙️ Settings
+    </button>
+</div>
     </aside>
 
     <!-- MAIN CONTENT AREA -->
@@ -386,7 +406,27 @@
         </div>
     </div>
 </div>
-      
+      <div id="tab-admin" class="view-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>User Control Panel</h2>
+            <button class="btn-primary" onclick="document.getElementById('addUserModal').style.display='flex'">+ New User</button>
+        </div>
+        <div class="table-responsive">
+            <table class="modern-table" id="adminUserTable">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Scope</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
 
     </main>
@@ -397,8 +437,54 @@
 <div id="loadingOverlay"><div class="loader"></div><h2 id="loadingText">Processing...</h2><p id="loadingSubtext">Please wait.</p></div>
 <div id="system-log" style="display:none;"></div>
 <div id="configModal"><div class="modal-content"><h3>API Connection Settings</h3><p style="font-size: 0.8rem; color: #666;">Adjust these only if connection fails.</p><div class="modal-row"><label>Proxy URL (Worker)</label><input type="text" id="cfg-url" value="https://jolt-proxy.ckuran.workers.dev"></div><div class="modal-row" style="opacity: 0.5;"><label>Auth Token (Managed by Worker)</label><input type="text" id="cfg-token-val" placeholder="(Hidden)" disabled></div><div style="text-align: right; margin-top: 15px;"><button onclick="saveConfig()" class="btn-primary">Save & Reload</button><button onclick="document.getElementById('configModal').style.display='none'" style="padding: 9px;">Cancel</button></div></div></div>
+<div id="loginOverlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:#1e293b; z-index:9999; display:flex; justify-content:center; align-items:center; flex-direction:column; color:white;">
+    <div style="background:white; padding:40px; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.5); text-align:center; color:#333; max-width:400px; width:90%;">
+        <h1 style="margin-bottom:10px;">⚡ Jolt Ops</h1>
+        <p style="color:#666; margin-bottom:20px;">Please sign in to access the dashboard.</p>
+        
+        <input type="email" id="txtEmail" placeholder="Email" style="width:100%; padding:10px; margin-bottom:10px; border:1px solid #ccc; border-radius:6px;">
+        <input type="password" id="txtPassword" placeholder="Password" style="width:100%; padding:10px; margin-bottom:20px; border:1px solid #ccc; border-radius:6px;">
+        
+        <button onclick="handleLogin()" class="btn-primary" style="width:100%;">Sign In</button>
+        <p id="loginError" style="color:red; margin-top:15px; font-size:0.9rem;"></p>
+    </div>
+</div>
+<div id="settingsModal" class="modal" style="display:none; position:fixed; z-index:9000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
+    <div class="modal-content" style="background:white; padding:20px; border-radius:8px; width:300px;">
+        <h3>Change Password</h3>
+        <input type="password" id="newPassword" placeholder="New Password" style="width:100%; padding:8px; margin:10px 0;">
+        <button onclick="changeMyPassword()" class="btn-primary" style="width:100%;">Update Password</button>
+        <button onclick="document.getElementById('settingsModal').style.display='none'" class="btn-secondary" style="width:100%; margin-top:10px;">Cancel</button>
+    </div>
+</div>
 
+<div id="addUserModal" class="modal" style="display:none; position:fixed; z-index:9000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
+    <div class="modal-content" style="background:white; padding:20px; border-radius:8px; width:350px;">
+        <h3>Create New User</h3>
+        <input type="email" id="newUserEmail" placeholder="Email Address" style="width:100%; padding:8px; margin:5px 0;">
+        <input type="text" id="newUserTempPass" value="Wendy2025!" placeholder="Temp Password" style="width:100%; padding:8px; margin:5px 0;">
+        
+        <label>Role:</label>
+        <select id="newUserRole" style="width:100%; padding:8px; margin:5px 0;">
+        <option value="store">Store / Site</option> 
+        <option value="market">Market Operator</option>
+        <option value="district">District Manager</option>
+        <option value="admin">Admin</option>
+        </select>
+
+        <label>Scope (Market/District Name):</label>
+        <input type="text" id="newUserScope" placeholder="e.g. Wenspok or Nikki Brown" style="width:100%; padding:8px; margin:5px 0;">
+        
+        <label style="font-size:0.8rem; display:flex; align-items:center; gap:5px;">
+            <input type="checkbox" id="newUserForceReset" checked> Force Password Change on First Login
+        </label>
+
+        <button onclick="createNewUser()" class="btn-primary" style="width:100%; margin-top:15px;">Create User</button>
+        <button onclick="document.getElementById('addUserModal').style.display='none'" class="btn-secondary" style="width:100%; margin-top:10px;">Cancel</button>
+    </div>
+</div>
+<script src="auth_logic.js"></script>
+<script src="admin_logic.js"></script>  
 <script src="jolt_logic.js"></script>
-
 </body>
 </html>
