@@ -740,3 +740,15 @@ body {
     .report-table th { -webkit-print-color-adjust: exact; background: #000 !important; color: white !important; }
     .cell-expired, .cell-today, .cell-warning { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+/* --- PRINT: AUDIT SCORE VISIBILITY --- */
+@media print {
+    /* Make the score stand out in print */
+    .audit-score-header {
+        display: block !important;
+        font-size: 14px !important;
+        font-weight: bold !important;
+        color: #000 !important;
+        margin-bottom: 15px !important;
+        border-bottom: 2px solid #000 !important;
+    }
+}

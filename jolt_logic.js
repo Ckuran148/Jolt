@@ -294,13 +294,16 @@ let config = { proxyUrl: ENDPOINT };
 
 window.addEventListener('DOMContentLoaded', () => {
     const today = new Date();
+    // Get LOCAL date parts (not UTC)
     const yyyy = today.getFullYear();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${yyyy}-${mm}-${dd}`;
-    const monthStr = `${yyyy}-${mm}`; // Current Month YYYY-MM
+    
+    const todayStr = `${yyyy}-${mm}-${dd}`;   // For Date Inputs (YYYY-MM-DD)
+    const monthStr = `${yyyy}-${mm}`;         // For Month Inputs (YYYY-MM)
     
     // Set default dates for daily inputs
+    // 'gridDate' is the DFSL Filter Date
     const els = ['startDate', 'endDate', 'gridDate', 'reportDate'];
     els.forEach(id => {
         const el = document.getElementById(id);
@@ -311,7 +314,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const auditMonth = document.getElementById('auditMonth');
     if(auditMonth) auditMonth.value = monthStr;
 
-    // --- FIX: Set default month for Safety Grid ---
+    // Set default month for Safety Grid
     const safetyMonth = document.getElementById('safetyMonth');
     if(safetyMonth) safetyMonth.value = monthStr;
     
@@ -324,14 +327,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
     loadConfigUI();
     fetchLocations();
-    loadStoreMetadata(); // Load CSV Data
+    loadStoreMetadata();
 
-    // RESTORE TAB FROM HASH (Fixes Refresh Issue)
+    // RESTORE TAB FROM HASH
     const hash = window.location.hash.replace('#', '');
     if(hash) {
         switchTab(hash);
     } else {
-        switchTab('inspector'); // Default
+        switchTab('inspector');
     }
 });
 
@@ -1382,10 +1385,19 @@ function renderGridRow(tbody, data) {
 }
 
 // --- PRINT & EXPORT ---
+// --- UPDATED PRINT FUNCTIONS (Date Fix) ---
+
 function printGrid() {
-    const dateStr = document.getElementById('gridDate').value;
+    const rawDate = document.getElementById('gridDate').value; // YYYY-MM-DD
     const m = document.getElementById('marketFilter').value || "All Markets";
     const d = document.getElementById('districtFilter').value || "All Districts";
+    
+    // FORMAT: MM-DD-YYYY
+    let displayDate = rawDate;
+    if (rawDate && rawDate.includes('-')) {
+        const [yyyy, mm, dd] = rawDate.split('-');
+        displayDate = `${mm}-${dd}-${yyyy}`;
+    }
     
     let header = document.getElementById('gridPrintHeader');
     if (!header) {
@@ -1397,7 +1409,34 @@ function printGrid() {
         const table = document.querySelector('#storeTable');
         table.parentNode.insertBefore(header, table);
     }
-    header.innerHTML = `<h2>DFSL Grid</h2><p>Date: ${dateStr} | Market: ${m} | District: ${d}</p>`;
+    header.innerHTML = `<h2>DFSL Grid</h2><p>Date: ${displayDate} | Market: ${m} | District: ${d}</p>`;
+    window.print();
+}
+
+function printSafetyGrid() {
+    const rawMonth = document.getElementById('safetyMonth').value; // YYYY-MM
+    const m = document.getElementById('safetyMarketFilter').value || "All Markets";
+    const d = document.getElementById('safetyDistrictFilter').value || "All Districts";
+    
+    // FORMAT: MM-YYYY
+    let displayMonth = rawMonth;
+    if (rawMonth && rawMonth.includes('-')) {
+        const [yyyy, mm] = rawMonth.split('-');
+        displayMonth = `${mm}-${yyyy}`;
+    }
+    
+    let header = document.getElementById('safetyPrintHeader');
+    if (!header) {
+        header = document.createElement('div');
+        header.id = 'safetyPrintHeader';
+        header.className = 'only-print';
+        header.style.marginBottom = '20px';
+        header.style.textAlign = 'center';
+        const table = document.querySelector('#safetyTable');
+        table.parentNode.insertBefore(header, table);
+    }
+    
+    header.innerHTML = `<h2>Safety Audit Grid</h2><p>Month: ${displayMonth} | Market: ${m} | District: ${d}</p>`;
     window.print();
 }
 
@@ -1422,13 +1461,26 @@ async function renderListDetails(listData, containerId = 'detailView') {
     const titleLower = listName.toLowerCase();
     const isAuditOrAgenda = titleLower.includes('audit') || titleLower.includes('agenda');
 
-    let headerHtml = `<div style="display:flex; justify-content:space-between; align-items:center;"><h3>${listName}</h3><button class="btn-secondary no-print" style="padding:5px 10px; font-size:0.8rem;" onclick='exportListDetails(${JSON.stringify(listData.id)})'>Export List Details</button></div>`;
+    const dateObj = listData.displayTimestamp ? ((listData.displayTimestamp > 9999999999) ? new Date(listData.displayTimestamp) : new Date(listData.displayTimestamp * 1000)) : new Date();
+    const dateStr = formatDateMMDDYYYY(dateObj);
+
+    let headerHtml = `
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+            <div>
+                <h3 style="margin:0;">${listName}</h3>
+                <div style="font-size:12px; color:#555; margin-top:4px;">Date: ${dateStr}</div>
+            </div>
+            <button class="btn-secondary no-print" style="padding:5px 10px; font-size:0.8rem;" onclick='exportListDetails(${JSON.stringify(listData.id)})'>Export List Details</button>
+        </div>`;
     
+    // --- FIX: Use 'audit-score-header' class so it PRINTS ---
     if (isAuditOrAgenda && !titleLower.includes('agenda') && listData.score !== undefined && listData.score !== null) {
         let max = listData.maxPossibleScore;
         if (!max) { const calculatedStats = getAuditScore(listData.itemResults || []); max = calculatedStats.possible; }
         const pct = max > 0 ? Math.round((listData.score / max) * 100) : 0;
-        headerHtml += `<div class="checklist-meta" style="margin-top:0;"><strong>🏆 Audit Score:</strong> ${pct}% (${listData.score}/${max})</div>`;
+        
+        // This class is NOT hidden by the print CSS
+        headerHtml += `<div class="audit-score-header" style="margin-top:5px; padding-bottom:10px; border-bottom:1px solid #eee;"><strong>🏆 Audit Score:</strong> ${pct}% (${listData.score}/${max})</div>`;
     }
 
     container.innerHTML = headerHtml;
@@ -1454,7 +1506,9 @@ async function renderListDetails(listData, containerId = 'detailView') {
         integrityHtml = `<div class="integrity-score ${badgeClass}">🛡️ Integrity Score: ${scoreDisplay} <span style="font-weight:normal; font-size:0.8rem; margin-left:10px;">(${scoreData.issues.join(', ') || 'Looks Good'})</span></div>`;
     }
     
+    // Keep duration/integrity in the meta container (which gets hidden on print)
     if (!isAuditOrAgenda && (durationHtml || integrityHtml)) container.innerHTML += `<div class="checklist-meta">${durationHtml} ${integrityHtml}</div>`;
+    
     const listContainer = document.createElement('div');
     items.forEach(item => { const el = createItemElement(item, isTargetList, isAuditOrAgenda); if (el) listContainer.appendChild(el); });
     container.appendChild(listContainer);
@@ -1471,10 +1525,9 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
     if (itemResult.itemTemplate && itemResult.itemTemplate.text) prompt = itemResult.itemTemplate.text; 
     else prompt = `Item ID: ${itemResult.id}`;
     
-    // --- 1. CLASS LOGIC ---
     let entryClass = "checklist-entry";
     
-    // Date/Sanitizer Logic
+    // Expiration Logic
     const isExpItem = prompt.includes("Sanitizer") && prompt.includes("Exp. Date");
     if (isExpItem && itemResult.resultDouble) {
         const today = new Date(); today.setHours(0,0,0,0);
@@ -1485,12 +1538,10 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
         else if (expDate <= sevenDays) entryClass += " expiring-item";
     }
 
-    // Note Logic (Highlight Yellow)
     if (prompt.trim().toLowerCase().startsWith("note")) {
         entryClass += " is-note-item";
     }
 
-    // Sublist Logic (Mark parent so CSS can hide duplicate headers)
     const hasSublist = itemResult.subList && itemResult.subList.itemResults && itemResult.subList.itemResults.length > 0;
     if (hasSublist) {
         entryClass += " has-sublist";
@@ -1498,7 +1549,6 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
 
     div.className = entryClass;
     
-    // --- 2. VALUE & STATUS ---
     let displayValue = ""; let statusClass = "status-pending"; let statusText = "TODO";
     let photoAsset = null; let photoUrl = null;
     const isPhotoType = typeUpper.includes('PHOTO') || templateTypeUpper.includes('PHOTO');
@@ -1517,7 +1567,10 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
     } else if (itemResult.resultDouble) {
             const isDateType = typeUpper.includes('DATE') || typeUpper.includes('TIME');
             if (isDateType || prompt.toLowerCase().includes('date')) { 
-                if (itemResult.resultDouble > 946684800) displayValue = new Date(itemResult.resultDouble * 1000).toLocaleDateString(); 
+                if (itemResult.resultDouble > 946684800) {
+                     // --- FIX: Use Standard Date Helper MM-DD-YYYY ---
+                     displayValue = formatDateMMDDYYYY(itemResult.resultDouble);
+                } 
                 else displayValue = itemResult.resultDouble; 
             } else displayValue = itemResult.resultDouble;
     } else if (itemResult.resultValue) displayValue = itemResult.resultValue;
@@ -1531,7 +1584,6 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
     if (photoUrl) { const safePrompt = escapeStr(prompt); photoBtnHtml = `<button class="photo-btn no-print" onclick="showPhoto('${safePrompt}', null, '${photoUrl}')">View Photo</button>`; } 
     else if (photoAsset) { const safeName = escapeStr(photoAsset.name); photoBtnHtml = `<button class="photo-btn no-print" onclick="showPhoto('${safeName}', '${photoAsset.id}', null)">View Photo Info</button>`; }
 
-    // --- 3. RENDER PARENT ROW ---
     let html = `<div class="entry-header"><span class="entry-title">${prompt}</span><div class="entry-right" style="display:flex; align-items:center;">${valDisplay ? `<span class="entry-value">${valDisplay}</span>` : ''}${photoBtnHtml}<span class="status-badge ${statusClass}" style="margin-left:10px;">${statusText}</span></div></div>`;
     
     if (itemResult.notes && itemResult.notes.length > 0) { 
@@ -1539,12 +1591,9 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
     }
     div.innerHTML = html;
 
-    // --- 4. RENDER SUBLIST ---
     if (hasSublist) {
         const subContainer = document.createElement('div'); 
         subContainer.className = 'sublist-container';
-        
-        // Use PARENT PROMPT as the header title (User Request)
         const subTitle = prompt; 
         
         let subIntegrityHtml = "";
@@ -1577,7 +1626,6 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
     }
     return div;
 }
-
 function downloadCSV(csvContent, filename) { const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); if (link.download !== undefined) { const url = URL.createObjectURL(blob); link.setAttribute("href", url); link.setAttribute("download", filename); link.style.visibility = 'hidden'; document.body.appendChild(link); link.click(); document.body.removeChild(link); } }
 function exportCurrentView() { 
     if (!currentListsCache || currentListsCache.length === 0) { alert("No data."); return; }
