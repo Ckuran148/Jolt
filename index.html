@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jolt Operations Dashboard</title>
+    <link rel="stylesheet" href="jolt_styles.css">
+</head>
+<body>
+
+<div class="dashboard-container">
+    
+    <!-- LEFT SIDEBAR (Desktop) / BOTTOM NAV (Mobile) -->
+    <aside class="sidebar">
+        <div class="brand">
+            <h1>⚡ Jolt Ops</h1>
+            <p>Dashboard</p>
+        </div>
+
+        <nav class="nav-menu">
+            
+            <!-- SECTION 1: LISTS -->
+            <div class="nav-section">
+                <div class="nav-header">Lists</div>
+                <button id="nav-inspector" class="nav-btn active" onclick="switchTab('inspector')">
+                    <span class="icon">📋</span> <span class="label">List Inspector</span>
+                </button>
+            </div>
+
+            <!-- SECTION 2: FOOD SAFETY -->
+            <div class="nav-section">
+                <div class="nav-header">Food Safety</div>
+                <button id="nav-grid" class="nav-btn" onclick="switchTab('grid')">
+                    <span class="icon">📊</span> <span class="label">DFSL Grid</span>
+                </button>
+                <button id="nav-report" class="nav-btn" onclick="switchTab('report')">
+                    <span class="icon">📄</span> <span class="label">DFSL Report</span>
+                </button>
+            </div>
+
+            <!-- SECTION 3: MONTHLY SAFETY -->
+            <div class="nav-section">
+                <div class="nav-header">Monthly Safety</div>
+                <button id="nav-audits" class="nav-btn" onclick="switchTab('audits')">
+                    <span class="icon">🛡️</span> <span class="label">Safety Audits</span>
+                </button>
+                <button id="nav-safety-grid" class="nav-btn" onclick="switchTab('safety-grid')">
+                    <span class="icon">⛑️</span> <span class="label">Safety Grid</span>
+                </button>
+            </div>
+
+        </nav>
+
+        <div class="sidebar-footer">
+            <button onclick="document.getElementById('configModal').style.display='flex'" class="config-trigger">⚙️ Settings</button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="content-area">
+        
+        <!-- Header for Mobile/Context -->
+        <header class="mobile-header">
+            <h2>Operations Dashboard</h2>
+        </header>
+
+        <!-- VIEW 1: INSPECTOR -->
+        <div id="tab-inspector" class="view-content active">
+            <div class="card">
+                <div class="card-header">
+                    <h2>List Inspector</h2>
+                    <div class="legend-box hide-mobile">
+                        <span class="legend-item">🛡️ Score</span>
+                        <span class="legend-item"><span style="color:red">🔴</span> Expired</span>
+                        <span class="legend-item"><span style="color:gold">🟡</span> Due Today</span>
+                    </div>
+                </div>
+
+                <div class="controls-bar">
+                    <details open class="filter-toggle">
+                        <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
+                        <div class="filter-content">
+                            <div class="control-group">
+                                <label>Location</label>
+                                <select id="locationSelect"><option>Loading...</option></select>
+                            </div>
+                            <div class="control-group">
+                                <label>Start Date</label>
+                                <input type="date" id="startDate">
+                            </div>
+                            <div class="control-group">
+                                <label>End Date</label>
+                                <input type="date" id="endDate">
+                            </div>
+                            <div class="button-group">
+                                <button class="btn-primary" onclick="fetchChecklists()">View Checklists</button>
+                                <button class="btn-secondary" onclick="exportCurrentView()">Export</button>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="split-view">
+                    <div class="list-sidebar" id="listSidebar">
+                        <div class="empty-state">Select filters to load lists</div>
+                    </div>
+                    
+                    <div class="detail-panel mobile-hidden" id="detailView">
+                        <div class="mobile-nav-header">
+                             <button class="btn-secondary back-btn" onclick="backToMobileList('listSidebar', 'detailView')">← Back to List</button>
+                        </div>
+                        <div class="empty-state">
+                            <h3>Select a list</h3>
+                            <p>Details will appear here</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: DFSL GRID (Renamed) -->
+        <div id="tab-grid" class="view-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>DFSL Grid</h2>
+                </div>
+                <div class="controls-bar">
+                    <details open class="filter-toggle">
+                        <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
+                        <div class="filter-content">
+                            <div class="control-group">
+                                <label>Date</label>
+                                <input type="date" id="gridDate">
+                            </div>
+                            
+                            <!-- FILTERS -->
+                            <div class="control-group">
+                                <label>Market</label>
+                                <select id="marketFilter">
+                                    <option value="">All Markets</option>
+                                    <option disabled>Loading...</option>
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label>District</label>
+                                <select id="districtFilter">
+                                    <option value="">All Districts</option>
+                                    <option disabled>Loading...</option>
+                                </select>
+                            </div>
+
+                            <div class="button-group">
+                                <button class="btn-primary" onclick="loadStoreGrid()">Load Grid</button>
+                                <button class="btn-secondary" onclick="printGrid()">Print / Save PDF</button>
+                                <button class="btn-secondary" onclick="exportGridToCSV()">Export CSV</button>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+                
+                <div class="table-responsive">
+                    <div id="gridPrintHeader" class="only-print"></div>
+                    <table class="modern-table" id="storeTable">
+                        <thead>
+                            <tr>
+                                <th>Store Name</th>
+                                <th>Daypart 1</th>
+                                <th>Daypart 3</th>
+                                <th>Daypart 5</th>
+                                <th>Sanitizer</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="5" style="text-align:center; padding:30px;">No data loaded.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 3: SAFETY GRID -->
+        <div id="tab-safety-grid" class="view-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Safety Audit Grid</h2>
+                </div>
+                <div class="controls-bar">
+                    <details open class="filter-toggle">
+                        <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
+                        <div class="filter-content">
+                            <div class="control-group">
+                                <label>Month</label>
+                                <input type="month" id="safetyMonth">
+                            </div>
+                            <div class="control-group">
+                                <label>Market</label>
+                                <select id="safetyMarketFilter">
+                                    <option value="">All Markets</option>
+                                    <option disabled>Loading...</option>
+                                </select>
+                            </div>
+                            <div class="control-group">
+                                <label>District</label>
+                                <select id="safetyDistrictFilter">
+                                    <option value="">All Districts</option>
+                                    <option disabled>Loading...</option>
+                                </select>
+                            </div>
+                            <div class="button-group">
+                                <button class="btn-primary" onclick="loadSafetyGrid()">Load Grid</button>
+                                <button class="btn-secondary" onclick="printSafetyGrid()">Print / Save PDF</button>
+                                <button class="btn-secondary" onclick="exportSafetyGridCSV()">Export CSV</button>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+                
+                <div class="table-responsive">
+                    <div id="safetyPrintHeader" class="only-print"></div>
+                    <table class="modern-table" id="safetyTable">
+                        <thead>
+                            <tr>
+                                <th>Site</th>
+                                <th>Monthly Safety Audit</th>
+                                <th>Safety Committee Agenda</th>
+                                <th>Complete?</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="4" style="text-align:center; padding:30px;">No data loaded.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 4: REPORT -->
+        <div id="tab-report" class="view-content">
+            <div class="card">
+                <div class="controls-bar no-print">
+                    <details open class="filter-toggle">
+                        <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
+                        <div class="filter-content">
+                            <div class="control-group">
+                                <label>Location</label>
+                                <select id="reportLocationSelect"><option>Loading...</option></select>
+                            </div>
+                            <div class="control-group">
+                                <label>Date</label>
+                                <input type="date" id="reportDate">
+                            </div>
+                            <div class="button-group">
+                                <button class="btn-primary" onclick="generateSingleReport()">Generate</button>
+                                <button class="btn-secondary" onclick="window.print()">Print/PDF</button>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="report-wrapper">
+                    <div class="report-page" id="reportContent">
+                        <div class="empty-state">Select Location & Date to generate report.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 5: AUDITS -->
+        <div id="tab-audits" class="view-content">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Safety Audits (Detail)</h2>
+                </div>
+                <div class="controls-bar no-print">
+                    <details open class="filter-toggle">
+                        <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
+                        <div class="filter-content">
+                            <div class="control-group">
+                                <label>Location</label>
+                                <select id="auditLocationSelect"><option>Loading...</option></select>
+                            </div>
+                            <div class="control-group">
+                                <label>Month</label>
+                                <input type="month" id="auditMonth">
+                            </div>
+                            <div class="button-group">
+    <button class="btn-primary" onclick="fetchAudits()">View Audits</button>
+    <button class="btn-secondary" onclick="window.print()">Print</button>
+</div>
+                        </div>
+                    </details>
+                </div>
+
+                <div class="split-view">
+                    <div class="list-sidebar" id="auditSidebar">
+                        <div class="empty-state">Select location & month</div>
+                    </div>
+                    
+                    <div class="detail-panel mobile-hidden" id="auditDetailView">
+                         <div class="mobile-nav-header">
+                            <button class="btn-secondary back-btn" onclick="backToMobileList('auditSidebar', 'auditDetailView')">← Back to List</button>
+                       </div>
+                        <div class="empty-state">
+                            <h3>Select an audit</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<!-- MODALS -->
+<div id="photoModal"><div class="photo-content"><button class="close-photo" onclick="closePhoto()">Close</button><h3 id="photoTitle">Photo Details</h3><div class="photo-placeholder"><span>Image Preview Unavailable via API</span></div><p id="photoCaption" style="font-family:monospace; color:#333; word-break:break-all;"></p></div></div>
+<div id="loadingOverlay"><div class="loader"></div><h2 id="loadingText">Processing...</h2><p id="loadingSubtext">Please wait.</p></div>
+<div id="system-log" style="display:none;"></div>
+<div id="configModal"><div class="modal-content"><h3>API Connection Settings</h3><p style="font-size: 0.8rem; color: #666;">Adjust these only if connection fails.</p><div class="modal-row"><label>Proxy URL (Worker)</label><input type="text" id="cfg-url" value="https://jolt-proxy.ckuran.workers.dev"></div><div class="modal-row" style="opacity: 0.5;"><label>Auth Token (Managed by Worker)</label><input type="text" id="cfg-token-val" placeholder="(Hidden)" disabled></div><div style="text-align: right; margin-top: 15px;"><button onclick="saveConfig()" class="btn-primary">Save & Reload</button><button onclick="document.getElementById('configModal').style.display='none'" style="padding: 9px;">Cancel</button></div></div></div>
+
+<script src="jolt_logic.js"></script>
+
+</body>
+</html>
