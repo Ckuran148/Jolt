@@ -28,13 +28,16 @@
             </div>
 
             <!-- SECTION 2: FOOD SAFETY -->
-            <div class="nav-section">
+           <div class="nav-section">
                 <div class="nav-header">Food Safety</div>
                 <button id="nav-grid" class="nav-btn" onclick="switchTab('grid')">
                     <span class="icon">📊</span> <span class="label">DFSL Grid</span>
                 </button>
                 <button id="nav-report" class="nav-btn" onclick="switchTab('report')">
                     <span class="icon">📄</span> <span class="label">DFSL Report</span>
+                </button>
+                <button id="nav-probeGrid" class="nav-btn" onclick="switchTab('probeGrid')">
+                    <span class="icon">🌡️</span> <span class="label">Probe & Sensor</span>
                 </button>
             </div>
 
@@ -47,6 +50,7 @@
                 <button id="nav-safety-grid" class="nav-btn" onclick="switchTab('safety-grid')">
                     <span class="icon">⛑️</span> <span class="label">Safety Grid</span>
                 </button>
+                
             </div>
 
         </nav>
@@ -66,57 +70,57 @@
 
         <!-- VIEW 1: INSPECTOR -->
         <div id="tab-inspector" class="view-content active">
-            <div class="card">
-                <div class="card-header">
-                    <h2>List Inspector</h2>
-                    <div class="legend-box hide-mobile">
-                        <span class="legend-item">🛡️ Score</span>
-                        <span class="legend-item"><span style="color:red">🔴</span> Expired</span>
-                        <span class="legend-item"><span style="color:gold">🟡</span> Due Today</span>
+    <div class="card">
+        <div class="card-header">
+            <h2>List Inspector</h2>
+            <div class="legend-box hide-mobile">
+                <span class="legend-item">🛡️ Score</span>
+                <span class="legend-item"><span style="color:red">🔴</span> Expired</span>
+                <span class="legend-item"><span style="color:gold">🟡</span> Due Today</span>
+            </div>
+        </div>
+
+        <div class="controls-bar">
+            <details open class="filter-toggle">
+                <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
+                <div class="filter-content">
+                    <div class="control-group">
+                        <label>Location</label>
+                        <select id="locationSelect"><option>Loading...</option></select>
+                    </div>
+                    <div class="control-group">
+                        <label>Start Date</label>
+                        <input type="date" id="startDate">
+                    </div>
+                    <div class="control-group">
+                        <label>End Date</label>
+                        <input type="date" id="endDate">
+                    </div>
+                    <div class="button-group">
+                        <button class="btn-primary" onclick="fetchChecklists()">View Checklists</button>
+                        <button class="btn-secondary" onclick="exportCurrentView()">Export</button>
                     </div>
                 </div>
+            </details>
+        </div>
 
-                <div class="controls-bar">
-                    <details open class="filter-toggle">
-                        <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
-                        <div class="filter-content">
-                            <div class="control-group">
-                                <label>Location</label>
-                                <select id="locationSelect"><option>Loading...</option></select>
-                            </div>
-                            <div class="control-group">
-                                <label>Start Date</label>
-                                <input type="date" id="startDate">
-                            </div>
-                            <div class="control-group">
-                                <label>End Date</label>
-                                <input type="date" id="endDate">
-                            </div>
-                            <div class="button-group">
-                                <button class="btn-primary" onclick="fetchChecklists()">View Checklists</button>
-                                <button class="btn-secondary" onclick="exportCurrentView()">Export</button>
-                            </div>
-                        </div>
-                    </details>
+        <div class="split-view">
+            <div class="list-sidebar" id="listSidebar">
+                <div class="empty-state">Select filters to load lists</div>
+            </div>
+            
+            <div class="detail-panel mobile-hidden" id="detailView">
+                <div class="mobile-nav-header">
+                        <button class="btn-secondary back-btn" onclick="backToMobileList('listSidebar', 'detailView')">← Back to List</button>
                 </div>
-
-                <div class="split-view">
-                    <div class="list-sidebar" id="listSidebar">
-                        <div class="empty-state">Select filters to load lists</div>
-                    </div>
-                    
-                    <div class="detail-panel mobile-hidden" id="detailView">
-                        <div class="mobile-nav-header">
-                             <button class="btn-secondary back-btn" onclick="backToMobileList('listSidebar', 'detailView')">← Back to List</button>
-                        </div>
-                        <div class="empty-state">
-                            <h3>Select a list</h3>
-                            <p>Details will appear here</p>
-                        </div>
-                    </div>
+                <div class="empty-state">
+                    <h3>Select a list</h3>
+                    <p>Details will appear here</p>
                 </div>
             </div>
         </div>
+    </div>
+</div>
 
         <!-- VIEW 2: DFSL GRID (Renamed) -->
         <div id="tab-grid" class="view-content">
@@ -307,6 +311,78 @@
                 </div>
             </div>
         </div>
+        <div id="tab-probeGrid" class="view-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>Probe & Sensor Report</h2>
+        </div>
+        <div class="controls-bar">
+            <details open class="filter-toggle">
+                <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
+                <div class="filter-content">
+                    
+                    <div class="control-group">
+                        <label>Start Date</label>
+                        <input type="date" id="probeStartDate_v2">
+                    </div>
+
+                    <div class="control-group">
+                        <label>End Date</label>
+                        <input type="date" id="probeEndDate_v2">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Market</label>
+                        <select id="probeMarketFilter_v2" onchange="updateProbeFilters_v2('market')">
+                            <option value="">All Markets</option>
+                            <option disabled>Loading...</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>District</label>
+                        <select id="probeDistrictFilter_v2" onchange="updateProbeFilters_v2('district')">
+                            <option value="">All Districts</option>
+                            <option disabled>Loading...</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Location</label>
+                        <select id="probeLocationFilter_v2">
+                            <option value="">All Locations</option>
+                            <option disabled>Select District...</option>
+                        </select>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn-primary" onclick="loadProbeGrid_v2()">Load Grid</button>
+                        <button class="btn-secondary" onclick="window.print()">Print / PDF</button>
+                        <button class="btn-secondary" onclick="exportProbeGridCSV_v2()">Export CSV</button>
+                    </div>
+                </div>
+            </details>
+        </div>
+        
+        <div class="table-responsive">
+            <div id="probePrintHeader" class="only-print"></div>
+            <table class="modern-table" id="probeTable">
+                <thead>
+                    <tr>
+                        <th>Site Name</th>
+                        <th>Probe Usage %</th>
+                        <th>Sensor Usage %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="3" style="text-align:center; padding:30px;">Select filters and click Load Grid.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+      
+
 
     </main>
 </div>
