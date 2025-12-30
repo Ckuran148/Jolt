@@ -1720,7 +1720,7 @@ function openConfig() { document.getElementById('configModal').style.display = '
 function saveConfig() { config.proxyUrl = document.getElementById('cfg-url').value; document.getElementById('configModal').style.display = 'none'; fetchLocations(); }
 function loadConfigUI() { document.getElementById('cfg-url').value = config.proxyUrl; }
 
-/* --- PROBE & SENSOR LOGIC (V2 - Date Range) --- */
+/* --- PROBE & SENSOR LOGIC (V4 - Fixed Sorting Race Condition) --- */
 
 // Configuration
 const PROBE_CONTENT_GROUP_ID = "Q29udGVudEdyb3VwOjAwMDU4NzViMjYwZDRjNmI2NDdhNjBjZDAxNDFlZDU2";
@@ -1819,6 +1819,7 @@ async function loadProbeGrid_v2() {
     const selLocationId = document.getElementById('probeLocationFilter_v2').value;
     const selDistrict = document.getElementById('probeDistrictFilter_v2').value;
     const selMarket = document.getElementById('probeMarketFilter_v2').value;
+    const isGrouped = document.getElementById('probeGroupToggle_v2').checked;
 
     if (!startDateStr || !endDateStr) { alert("Please select start and end dates."); return; }
 
@@ -1827,14 +1828,13 @@ async function loadProbeGrid_v2() {
     overlay.style.display = 'flex';
     probeGridDataCache_v2 = [];
 
-    // Calculate Timestamps (Start of Day 1 -> End of Day 2)
     const startTs = Math.floor(new Date(startDateStr + 'T00:00:00').getTime() / 1000);
     const endTs = Math.floor(new Date(endDateStr + 'T23:59:59').getTime() / 1000);
     
     const tbody = document.querySelector('#probeTable tbody');
     tbody.innerHTML = '';
 
-    // Update Print Header with Date Range
+    // Print Header
     let header = document.getElementById('probePrintHeader');
     if (!header) {
         header = document.createElement('div');
@@ -1847,11 +1847,12 @@ async function loadProbeGrid_v2() {
 
     let targets = [];
     const allLocs = locationsCache || [];
+    const meta = storeMetadataCache || [];
 
+    // Filter Logic
     if (selLocationId) {
         targets = allLocs.filter(l => l.id === selLocationId);
     } else {
-        const meta = storeMetadataCache || [];
         let validMeta = meta;
         if (selMarket) validMeta = validMeta.filter(m => m.market === selMarket);
         if (selDistrict) validMeta = validMeta.filter(m => m.district === selDistrict);
@@ -1877,29 +1878,92 @@ async function loadProbeGrid_v2() {
         return;
     }
 
-    const chunkSize = 3; 
-    for (let i = 0; i < targets.length; i += chunkSize) {
-        const chunk = targets.slice(i, i + chunkSize);
-        loadText.innerText = `Processing ${i + 1} - ${Math.min(i + chunkSize, targets.length)} of ${targets.length}`;
+    // --- PREPARE DATA FOR GROUPING ---
+    let processedTargets = targets.map(loc => {
+        const locName = loc.name.toLowerCase();
+        // Loose match logic (same as filters)
+        const m = meta.find(item => {
+            if (item.site && item.site.length > 2 && locName.includes(item.site)) return true;
+            if (item.store && locName.includes(item.store.toLowerCase())) return true;
+            return false;
+        });
+        return {
+            ...loc,
+            marketName: m ? m.market : 'Unassigned',
+            districtName: m ? m.district : 'Unassigned'
+        };
+    });
 
-        await Promise.all(chunk.map(async (loc) => {
+    // --- STRICT SORTING ---
+    if (isGrouped) {
+        processedTargets.sort((a, b) => {
+            if (a.marketName !== b.marketName) return a.marketName.localeCompare(b.marketName);
+            if (a.districtName !== b.districtName) return a.districtName.localeCompare(b.districtName);
+            return a.name.localeCompare(b.name);
+        });
+    } else {
+        processedTargets.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    // --- LOOP & RENDER (Strict Order Fix) ---
+    // We now fetch in chunks, but RENDER synchronously afterwards to prevent race conditions
+    const chunkSize = 3; 
+    let lastMarket = null;
+    let lastDistrict = null;
+
+    for (let i = 0; i < processedTargets.length; i += chunkSize) {
+        const chunk = processedTargets.slice(i, i + chunkSize);
+        loadText.innerText = `Processing ${i + 1} - ${Math.min(i + chunkSize, processedTargets.length)} of ${processedTargets.length}`;
+
+        // 1. FETCH DATA (Parallel)
+        const chunkResults = await Promise.all(chunk.map(async (loc) => {
             try {
                 const probeData = await fetchProbeStats_v2(loc.id, startTs, endTs, PROBE_TEMPLATE_IDS);
                 const sensorData = await fetchProbeStats_v2(loc.id, startTs, endTs, SENSOR_TEMPLATE_IDS);
-                const rowData = {
-                    name: loc.name,
+                return {
+                    loc: loc,
                     probe: probeData || { probePercent: 0, probeCount: 0, probeTotal: 0 },
-                    sensor: sensorData || { probePercent: 0, probeCount: 0, probeTotal: 0 }
+                    sensor: sensorData || { probePercent: 0, probeCount: 0, probeTotal: 0 },
+                    error: null
+                };
+            } catch(e) {
+                return { loc: loc, error: e };
+            }
+        }));
+
+        // 2. RENDER DATA (Synchronous & Sorted)
+        // We iterate the results in the same order they were in 'chunk' (which is sorted)
+        for (const res of chunkResults) {
+            // Header Logic
+            if (isGrouped) {
+                if (res.loc.marketName !== lastMarket || res.loc.districtName !== lastDistrict) {
+                    const headerRow = document.createElement('tr');
+                    headerRow.style.background = '#e2e8f0'; 
+                    headerRow.innerHTML = `<td colspan="3" style="font-weight:bold; color:#1e293b; padding:10px 12px; border-top:2px solid #94a3b8;">${res.loc.marketName} <span style="color:#64748b; font-weight:normal; margin:0 5px;">/</span> ${res.loc.districtName}</td>`;
+                    tbody.appendChild(headerRow);
+                    lastMarket = res.loc.marketName;
+                    lastDistrict = res.loc.districtName;
+                }
+            }
+
+            // Row Logic
+            if (res.error) {
+                console.error("Probe Grid Error " + res.loc.name, res.error);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td><strong>${res.loc.name}</strong></td><td colspan="2" style="color:red;">Error loading data</td>`;
+                tbody.appendChild(tr);
+            } else {
+                const rowData = {
+                    name: res.loc.name,
+                    probe: res.probe,
+                    sensor: res.sensor
                 };
                 probeGridDataCache_v2.push(rowData);
                 renderProbeRow_v2(tbody, rowData);
-            } catch(e) {
-                console.error("Probe Grid Error " + loc.name, e);
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td><strong>${loc.name}</strong></td><td colspan="2" style="color:red;">Error loading data</td>`;
-                tbody.appendChild(tr);
             }
-        }));
+        }
+        
+        // Small delay between chunks to be nice to API
         await delay(300); 
     }
     overlay.style.display = 'none';
@@ -1947,4 +2011,4 @@ window.addEventListener('DOMContentLoaded', () => {
     if(pEnd) pEnd.value = todayStr;
     initProbeFilters_v2();
 });
-/* --- END PROBE LOGIC (V2) --- */
+/* --- END PROBE LOGIC (V4) --- */
