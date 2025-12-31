@@ -56,43 +56,50 @@ async function handleLogin() {
 }
 
 // 4. SHARED STARTUP LOGIC
+// A. LOAD USER PROFILE & START APP
 async function loadProfileAndStart(email) {
     try {
-        // A. Get Role from Firestore
-        const docRef = db.collection('users').where('email', '==', email);
-        const snapshot = await docRef.get();
-
-        if (snapshot.empty) {
-            alert("Login failed: User has no assigned role in database.");
-            await auth.signOut(); // Force logout so they can try again
+        const doc = await db.collection('users').doc(email).get();
+        if (!doc.exists) {
+            // Force logout if user deleted from DB but still in Auth
+            await auth.signOut();
+            alert("Account not found. Please contact admin.");
             return;
         }
 
-        // B. Save Profile
-        const data = snapshot.docs[0].data();
-        window.userProfile.role = data.role;   // 'market', 'district', 'admin', OR 'store'
-        window.userProfile.scope = data.scope; // e.g. 'South 48'
+        const data = doc.data();
+        window.userProfile.role = data.role;
+        window.userProfile.scope = data.scope;
         
+        // --- NEW: DISPLAY NAME IN SIDEBAR ---
+        const fullName = data.name || "User";
+        const firstName = fullName.split(' ')[0]; // Get just the first name
+        const displayEl = document.getElementById('sidebarUserDisplay');
+        if(displayEl) {
+            displayEl.innerHTML = `Welcome, <strong>${firstName}</strong>`;
+        }
+        // ------------------------------------
+
         console.log("Profile Loaded:", window.userProfile);
 
-        // C. Hide Overlay
+        // Hide Overlay
         const overlay = document.getElementById('loginOverlay');
         if(overlay) overlay.style.display = 'none';
 
-        // D. Show Admin Tab (if applicable)
+        // Show Admin Tab if applicable
         if (window.userProfile.role === 'admin') {
             const adminNav = document.getElementById('nav-admin-section');
             if (adminNav) adminNav.style.display = 'block';
         }
 
-        // E. Check Force Reset
+        // Check Force Reset
         if (typeof checkPasswordResetRequirement === 'function') {
             checkPasswordResetRequirement(email);
         }
 
-        // F. Start Jolt App (Prevent double-loading)
+        // Start Jolt App
         if (!window.appLoaded && typeof loadStoreMetadata === "function") {
-            window.appLoaded = true; // Flag to prevent double load
+            window.appLoaded = true; 
             loadStoreMetadata().then(() => {
                  fetchLocations(); 
             });

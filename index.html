@@ -16,9 +16,10 @@
     <!-- LEFT SIDEBAR (Desktop) / BOTTOM NAV (Mobile) -->
     <aside class="sidebar">
         <div class="brand">
-            <h1>⚡ Jolt Ops</h1>
-            <p>Dashboard</p>
-        </div>
+  <img src="LogoFace.png" alt="Wenspok Logo" style="height: 24px; margin-right: 10px; vertical-align: middle;">
+  
+  Wenspok Jolt
+</div>
 
         <nav class="nav-menu">
             
@@ -78,8 +79,10 @@
         ⚙️ Settings
     </button>
 </div>
+<div id="sidebarUserDisplay" style="margin-top: auto; padding: 15px; font-size: 0.9rem; color: #94a3b8; border-top: 1px solid #334155;">
+            Welcome, User
+        </div>
     </aside>
-
     <!-- MAIN CONTENT AREA -->
     <main class="content-area">
         
@@ -100,29 +103,26 @@
             </div>
         </div>
 
-        <div class="controls-bar">
-            <details open class="filter-toggle">
-                <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
-                <div class="filter-content">
-                    <div class="control-group">
-                        <label>Location</label>
-                        <select id="locationSelect"><option>Loading...</option></select>
-                    </div>
-                    <div class="control-group">
-                        <label>Start Date</label>
-                        <input type="date" id="startDate">
-                    </div>
-                    <div class="control-group">
-                        <label>End Date</label>
-                        <input type="date" id="endDate">
-                    </div>
-                    <div class="button-group">
-                        <button class="btn-primary" onclick="fetchChecklists()">View Checklists</button>
-                        <button class="btn-secondary" onclick="exportCurrentView()">Export</button>
-                    </div>
-                </div>
-            </details>
-        </div>
+        <div class="control-group">
+    <label>Market</label>
+    <select id="marketFilter" onchange="updateOpsGridHierarchy('market')">
+        <option value="">All Markets</option>
+    </select>
+</div>
+
+<div class="control-group">
+    <label>District</label>
+    <select id="districtFilter" onchange="updateOpsGridHierarchy('district')">
+        <option value="">All Districts</option>
+    </select>
+</div>
+
+<div class="control-group">
+    <label>Location</label>
+    <select id="storeLocationFilter">
+        <option value="">All Locations</option>
+    </select>
+</div>
 
         <div class="split-view">
             <div class="list-sidebar" id="listSidebar">
@@ -143,64 +143,69 @@
 </div>
 
         <!-- VIEW 2: DFSL GRID (Renamed) -->
-        <div id="tab-grid" class="view-content">
-            <div class="card">
-                <div class="card-header">
-                    <h2>DFSL Grid</h2>
-                </div>
-                <div class="controls-bar">
-                    <details open class="filter-toggle">
-                        <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
-                        <div class="filter-content">
-                            <div class="control-group">
-                                <label>Date</label>
-                                <input type="date" id="gridDate">
-                            </div>
-                            
-                            <!-- FILTERS -->
-                            <div class="control-group">
-                                <label>Market</label>
-                                <select id="marketFilter">
-                                    <option value="">All Markets</option>
-                                    <option disabled>Loading...</option>
-                                </select>
-                            </div>
-                            <div class="control-group">
-                                <label>District</label>
-                                <select id="districtFilter">
-                                    <option value="">All Districts</option>
-                                    <option disabled>Loading...</option>
-                                </select>
-                            </div>
-
-                            <div class="button-group">
-                                <button class="btn-primary" onclick="loadStoreGrid()">Load Grid</button>
-                                <button class="btn-secondary" onclick="printGrid()">Print / Save PDF</button>
-                                <button class="btn-secondary" onclick="exportGridToCSV()">Export CSV</button>
-                            </div>
-                        </div>
-                    </details>
-                </div>
-                
-                <div class="table-responsive">
-                    <div id="gridPrintHeader" class="only-print"></div>
-                    <table class="modern-table" id="storeTable">
-                        <thead>
-                            <tr>
-                                <th>Store Name</th>
-                                <th>Daypart 1</th>
-                                <th>Daypart 3</th>
-                                <th>Daypart 5</th>
-                                <th>Sanitizer</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr><td colspan="5" style="text-align:center; padding:30px;">No data loaded.</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
+<div id="tab-grid" class="view-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>DFSL Grid</h2>
         </div>
+        <div class="controls-bar">
+            <details open class="filter-toggle">
+                <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
+                <div class="filter-content">
+                    <div class="control-group">
+                        <label>Date</label>
+                        <input type="date" id="gridDate">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Market</label>
+                        <select id="gridMarketFilter" onchange="updateGridFilters('market')">
+                            <option value="">All Markets</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>District</label>
+                        <select id="gridDistrictFilter" onchange="updateGridFilters('district')">
+                            <option value="">All Districts</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Location</label>
+                        <select id="gridLocationFilter">
+                            <option value="">All Locations</option>
+                        </select>
+                    </div>
+
+                    <div class="button-group">
+                        <button class="btn-primary" onclick="loadStoreGrid()">Load Grid</button>
+                        <button class="btn-secondary" onclick="printGrid()">Print / Save PDF</button>
+                        <button class="btn-secondary" onclick="exportGridToCSV()">Export CSV</button>
+                    </div>
+                </div>
+            </details>
+        </div>
+        
+        <div class="table-responsive">
+            <div id="gridPrintHeader" class="only-print"></div>
+            <table class="modern-table" id="storeTable">
+                <thead>
+                    <tr>
+                        <th>Store Name</th>
+                        <th>Daypart 1</th>
+                        <th>Daypart 3</th>
+                        <th>Daypart 5</th>
+                        <th>Sanitizer</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="5" style="text-align:center; padding:30px;">No data loaded.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
         <!-- VIEW 3: SAFETY GRID -->
         <div id="tab-safety-grid" class="view-content">
@@ -212,30 +217,37 @@
                     <details open class="filter-toggle">
                         <summary class="btn-secondary filter-summary">⚙️ Show Filters</summary>
                         <div class="filter-content">
-                            <div class="control-group">
-                                <label>Month</label>
-                                <input type="month" id="safetyMonth">
-                            </div>
-                            <div class="control-group">
-                                <label>Market</label>
-                                <select id="safetyMarketFilter">
-                                    <option value="">All Markets</option>
-                                    <option disabled>Loading...</option>
-                                </select>
-                            </div>
-                            <div class="control-group">
-                                <label>District</label>
-                                <select id="safetyDistrictFilter">
-                                    <option value="">All Districts</option>
-                                    <option disabled>Loading...</option>
-                                </select>
-                            </div>
-                            <div class="button-group">
-                                <button class="btn-primary" onclick="loadSafetyGrid()">Load Grid</button>
-                                <button class="btn-secondary" onclick="printSafetyGrid()">Print / Save PDF</button>
-                                <button class="btn-secondary" onclick="exportSafetyGridCSV()">Export CSV</button>
-                            </div>
-                        </div>
+    <div class="control-group">
+        <label>Month</label>
+        <input type="month" id="safetyMonth">
+    </div>
+
+    <div class="control-group">
+    <label>Market</label>
+    <select id="safetyMarketFilter" onchange="updateSafetyFilters('market')">
+        <option value="">All Markets</option>
+    </select>
+</div>
+
+<div class="control-group">
+    <label>District</label>
+    <select id="safetyDistrictFilter" onchange="updateSafetyFilters('district')">
+        <option value="">All Districts</option>
+    </select>
+</div>
+
+<div class="control-group">
+    <label>Location</label>
+    <select id="safetyLocationFilter">
+        <option value="">All Locations</option>
+    </select>
+</div>
+    <div class="button-group">
+        <button class="btn-primary" onclick="loadSafetyGrid()">Load Grid</button>
+        <button class="btn-secondary" onclick="printSafetyGrid()">Print / Save PDF</button>
+        <button class="btn-secondary" onclick="exportSafetyGridCSV()">Export CSV</button>
+    </div>
+</div>
                     </details>
                 </div>
                 
@@ -406,23 +418,28 @@
         </div>
     </div>
 </div>
-      <div id="tab-admin" class="view-content">
+<div id="tab-admin" class="view-content">
     <div class="card">
         <div class="card-header">
-            <h2>User Control Panel</h2>
-            <button class="btn-primary" onclick="document.getElementById('addUserModal').style.display='flex'">+ New User</button>
+             <h2>User Control Panel</h2>
+            <button class="btn-primary" onclick="openCreateUserModal()">+ New User</button>
         </div>
+        
+        <datalist id="scopeOptions"></datalist>
+
         <div class="table-responsive">
             <table class="modern-table" id="adminUserTable">
                 <thead>
                     <tr>
-                        <th>Email</th>
-                        <th>Role</th>
-                        <th>Scope</th>
-                        <th>Actions</th>
+                        <th style="width: 20%;">Name</th>
+                        <th style="width: 25%;">Email</th>
+                        <th style="width: 15%;">Role</th>
+                        <th style="width: 25%;">Scope</th>
+                        <th style="width: 15%;">Actions</th>
                     </tr>
                 </thead>
-                <tbody></tbody>
+                <tbody>
+                    </tbody>
             </table>
         </div>
     </div>
@@ -459,28 +476,89 @@
 </div>
 
 <div id="addUserModal" class="modal" style="display:none; position:fixed; z-index:9000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
-    <div class="modal-content" style="background:white; padding:20px; border-radius:8px; width:350px;">
+    <div class="modal-content" style="background:white; padding:20px; border-radius:8px; width:500px; max-width:95%; max-height:90vh; overflow-y:auto;">
         <h3>Create New User</h3>
+        <h3>Create New User</h3>
+        <input type="text" id="newUserName" placeholder="Full Name" style="width:100%; padding:8px; margin:5px 0;">       
+    
         <input type="email" id="newUserEmail" placeholder="Email Address" style="width:100%; padding:8px; margin:5px 0;">
         <input type="text" id="newUserTempPass" value="Wendy2025!" placeholder="Temp Password" style="width:100%; padding:8px; margin:5px 0;">
         
         <label>Role:</label>
-        <select id="newUserRole" style="width:100%; padding:8px; margin:5px 0;">
-        <option value="store">Store / Site</option> 
-        <option value="market">Market Operator</option>
-        <option value="district">District Manager</option>
-        <option value="admin">Admin</option>
+        <select id="newUserRole" onchange="toggleNewUserScopeSections()" style="width:100%; padding:8px; margin:5px 0 15px 0;">
+            <option value="store">Store / Site</option> 
+            <option value="market">Market Operator</option>
+            <option value="district">District Manager</option>
+            <option value="admin">Admin</option>
         </select>
 
-        <label>Scope (Market/District Name):</label>
-        <input type="text" id="newUserScope" placeholder="e.g. Wenspok or Nikki Brown" style="width:100%; padding:8px; margin:5px 0;">
+        <div id="section-new-market" class="scope-section" style="display:none;">
+            <div class="scope-header">Select Market(s)</div>
+            <div class="checkbox-list" id="listNewMarkets">Loading...</div>
+        </div>
+
+        <div id="section-new-district" class="scope-section" style="display:none;">
+            <div class="scope-header">Select District(s)</div>
+            <div class="checkbox-list" id="listNewDistricts">Loading...</div>
+        </div>
+
+        <div id="section-new-site" class="scope-section">
+            <div class="scope-header">
+                <span>Select Site(s)</span>
+                <input type="text" placeholder="Search sites..." onkeyup="filterCheckboxList('listNewSites', this.value)" style="font-size:0.7rem; padding:2px;">
+            </div>
+            <div class="checkbox-list" id="listNewSites">Loading...</div>
+        </div>
         
-        <label style="font-size:0.8rem; display:flex; align-items:center; gap:5px;">
+        <label style="font-size:0.8rem; display:flex; align-items:center; gap:5px; margin-top:10px;">
             <input type="checkbox" id="newUserForceReset" checked> Force Password Change on First Login
         </label>
 
         <button onclick="createNewUser()" class="btn-primary" style="width:100%; margin-top:15px;">Create User</button>
         <button onclick="document.getElementById('addUserModal').style.display='none'" class="btn-secondary" style="width:100%; margin-top:10px;">Cancel</button>
+    </div>
+</div>
+<div id="editUserModal" class="modal" style="display:none; position:fixed; z-index:9000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
+    <div class="modal-content" style="background:white; padding:20px; border-radius:8px; width:500px; max-width:95%; max-height:90vh; overflow-y:auto;">
+        <h3>Edit User Permissions</h3>
+        
+        <p style="margin-bottom:15px; color:#64748b;">
+            Editing: <strong id="editUserEmailDisplay" style="color:#334155;">...</strong>
+        </p>
+        
+        <label>Full Name:</label>
+        <input type="text" id="editUserName" placeholder="User Full Name" style="width:100%; padding:8px; margin:5px 0 15px 0;">
+
+        <label>Role:</label>
+        <select id="editUserRole" onchange="toggleScopeSections()" style="width:100%; padding:8px; margin:5px 0 15px 0;">
+            <option value="store">Store / Site</option> 
+            <option value="market">Market Operator</option>
+            <option value="district">District Manager</option>
+            <option value="admin">Admin</option>
+        </select>
+
+        <div id="section-market" class="scope-section" style="display:none;">
+            <div class="scope-header">Select Market(s)</div>
+            <div class="checkbox-list" id="listMarkets">Loading...</div>
+        </div>
+
+        <div id="section-district" class="scope-section" style="display:none;">
+            <div class="scope-header">Select District(s)</div>
+            <div class="checkbox-list" id="listDistricts">Loading...</div>
+        </div>
+
+        <div id="section-site" class="scope-section">
+            <div class="scope-header">
+                <span>Select Site(s)</span>
+                <input type="text" placeholder="Search sites..." onkeyup="filterCheckboxList('listSites', this.value)" style="font-size:0.7rem; padding:2px;">
+            </div>
+            <div class="checkbox-list" id="listSites">Loading...</div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button onclick="saveUserChanges()" class="btn-primary" style="flex:1;">Save Changes</button>
+            <button onclick="document.getElementById('editUserModal').style.display='none'" class="btn-secondary" style="flex:1;">Cancel</button>
+        </div>
     </div>
 </div>
 <script src="auth_logic.js"></script>
