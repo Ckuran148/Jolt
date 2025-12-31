@@ -399,7 +399,7 @@ function parseStoreMetadata(csvText) {
 function updateOpsGridHierarchy(source) {
     const marketSel = document.getElementById('marketFilter');
     const districtSel = document.getElementById('districtFilter');
-    const locationSel = document.getElementById('storeLocationFilter');
+    const locationSel = document.getElementById('locationSelect');
 
     if (!marketSel || !districtSel || !locationSel) return;
 

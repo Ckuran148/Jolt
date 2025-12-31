@@ -92,7 +92,7 @@
         </header>
 
         <!-- VIEW 1: INSPECTOR -->
-        <div id="tab-inspector" class="view-content active">
+<div id="tab-inspector" class="view-content active">
     <div class="card">
         <div class="card-header">
             <h2>List Inspector</h2>
@@ -103,35 +103,53 @@
             </div>
         </div>
 
-        <div class="control-group">
-    <label>Market</label>
-    <select id="marketFilter" onchange="updateOpsGridHierarchy('market')">
-        <option value="">All Markets</option>
-    </select>
-</div>
+        <div class="controls-bar">
+            <div class="filter-content">
+                <div class="control-group">
+                    <label for="marketFilter">Market</label>
+                    <select id="marketFilter" onchange="updateOpsGridHierarchy('market')">
+                        <option value="">All Markets</option>
+                    </select>
+                </div>
 
-<div class="control-group">
-    <label>District</label>
-    <select id="districtFilter" onchange="updateOpsGridHierarchy('district')">
-        <option value="">All Districts</option>
-    </select>
-</div>
+                <div class="control-group">
+                    <label for="districtFilter">District</label>
+                    <select id="districtFilter" onchange="updateOpsGridHierarchy('district')">
+                        <option value="">All Districts</option>
+                    </select>
+                </div>
 
-<div class="control-group">
-    <label>Location</label>
-    <select id="storeLocationFilter">
-        <option value="">All Locations</option>
-    </select>
-</div>
+                <div class="control-group">
+                    <label for="locationSelect">Location</label>
+                    <select id="locationSelect">
+                        <option value="">All Locations</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="startDate">Start Date</label>
+                    <input type="date" id="startDate">
+                </div>
+
+                <div class="control-group">
+                    <label for="endDate">End Date</label>
+                    <input type="date" id="endDate">
+                </div>
+
+                <div class="button-group" style="margin-left: 0;">
+                    <button class="btn-primary" onclick="fetchChecklists()">View Lists</button>
+                </div>
+            </div>
+        </div>
 
         <div class="split-view">
             <div class="list-sidebar" id="listSidebar">
-                <div class="empty-state">Select filters to load lists</div>
+                <div class="empty-state">Select filters and click View Lists</div>
             </div>
             
             <div class="detail-panel mobile-hidden" id="detailView">
                 <div class="mobile-nav-header">
-                        <button class="btn-secondary back-btn" onclick="backToMobileList('listSidebar', 'detailView')">← Back to List</button>
+                    <button class="btn-secondary back-btn" onclick="backToMobileList('listSidebar', 'detailView')">← Back to List</button>
                 </div>
                 <div class="empty-state">
                     <h3>Select a list</h3>
@@ -139,8 +157,9 @@
                 </div>
             </div>
         </div>
-    </div>
+    </div> 
 </div>
+
 
         <!-- VIEW 2: DFSL GRID (Renamed) -->
 <div id="tab-grid" class="view-content">
