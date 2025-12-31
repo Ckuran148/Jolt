@@ -43,7 +43,16 @@ function formatTime(timestamp) {
     let d = timestamp > 946684800000 ? new Date(timestamp) : new Date(timestamp * 1000);
     return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 }
-
+// Helper to safely get metadata (Paste this anywhere in the global scope)
+function getMetaForLoc(loc) {
+    if (!storeMetadataCache) return null;
+    const locName = loc.name.toLowerCase();
+    return storeMetadataCache.find(m => {
+        if (m.site && m.site.length > 2 && locName.includes(m.site)) return true;
+        if (m.store && locName.includes(m.store.toLowerCase())) return true;
+        return false;
+    });
+}
 function calculateDuration(items) {
     if (!items || !Array.isArray(items)) return { text: null, seconds: null };
     let timestamps = [];
@@ -384,14 +393,154 @@ function parseStoreMetadata(csvText) {
         });
     }
 }
+// --- OPS GRID HIERARCHY LOGIC ---
+// --- OPS GRID HIERARCHY LOGIC ---
+// --- OPS GRID HIERARCHY LOGIC (Robust) ---
+function updateOpsGridHierarchy(source) {
+    const marketSel = document.getElementById('marketFilter');
+    const districtSel = document.getElementById('districtFilter');
+    const locationSel = document.getElementById('storeLocationFilter');
 
+    if (!marketSel || !districtSel || !locationSel) return;
+
+    // 1. Get Current Selections (Cleaned)
+    const selectedMarket = marketSel.value.trim();
+    const selectedDistrict = districtSel.value.trim();
+
+    // 2. Filter Available Locations
+    let availableLocs = locationsCache;
+
+    // Filter by Market
+    if (selectedMarket) {
+        availableLocs = availableLocs.filter(loc => {
+            const meta = getMetaForLoc(loc);
+            return meta && meta.market.trim() === selectedMarket;
+        });
+    }
+
+    // Filter by District (only if source is 'district' or we are refreshing lists)
+    if (source === 'district' && selectedDistrict) {
+        availableLocs = availableLocs.filter(loc => {
+            const meta = getMetaForLoc(loc);
+            return meta && meta.district.trim() === selectedDistrict;
+        });
+    }
+
+    // 3. Update District Dropdown (If Market Changed or Init)
+    if (source === 'market' || source === 'init') {
+        const uniqueDistricts = new Set();
+        availableLocs.forEach(loc => {
+            const meta = getMetaForLoc(loc);
+            if (meta && meta.district) uniqueDistricts.add(meta.district.trim());
+        });
+        
+        // Save old selection to prevent annoying resets if possible
+        const oldDist = districtSel.value;
+
+        districtSel.innerHTML = '<option value="">All Districts</option>';
+        Array.from(uniqueDistricts).sort().forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d; 
+            opt.textContent = d; 
+            districtSel.appendChild(opt);
+        });
+
+        // Restore selection if it still exists in the new list
+        if (source === 'init' && oldDist && uniqueDistricts.has(oldDist)) {
+             districtSel.value = oldDist;
+        } else {
+            districtSel.value = "";
+        }
+    }
+
+    // 4. Update Location Dropdown (Always)
+    locationSel.innerHTML = '<option value="">All Locations</option>';
+    availableLocs.sort((a,b) => a.name.localeCompare(b.name));
+    
+    availableLocs.forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc.id;
+        opt.textContent = loc.name;
+        locationSel.appendChild(opt);
+    });
+}
+// --- DFSL GRID FILTER LOGIC (New Unique Function) ---
+function updateGridFilters(source) {
+    const marketSel = document.getElementById('gridMarketFilter');
+    const districtSel = document.getElementById('gridDistrictFilter');
+    const locationSel = document.getElementById('gridLocationFilter');
+
+    if (!marketSel || !districtSel || !locationSel) return;
+
+    const selectedMarket = marketSel.value.trim();
+    const selectedDistrict = districtSel.value.trim();
+
+    let availableLocs = locationsCache;
+
+    // Filter by Market
+    if (selectedMarket) {
+        availableLocs = availableLocs.filter(loc => {
+            const meta = getMetaForLoc(loc);
+            return meta && meta.market.trim() === selectedMarket;
+        });
+    }
+
+    // Filter by District
+    if (source === 'district' && selectedDistrict) {
+        availableLocs = availableLocs.filter(loc => {
+            const meta = getMetaForLoc(loc);
+            return meta && meta.district.trim() === selectedDistrict;
+        });
+    }
+
+    // Update District Dropdown
+    if (source === 'market' || source === 'init') {
+        const uniqueDistricts = new Set();
+        availableLocs.forEach(loc => {
+            const meta = getMetaForLoc(loc);
+            if (meta && meta.district) uniqueDistricts.add(meta.district.trim());
+        });
+        
+        const oldDist = districtSel.value;
+        districtSel.innerHTML = '<option value="">All Districts</option>';
+        Array.from(uniqueDistricts).sort().forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d; opt.textContent = d; districtSel.appendChild(opt);
+        });
+        
+        if (source === 'init' && oldDist && uniqueDistricts.has(oldDist)) {
+             districtSel.value = oldDist;
+        } else {
+            districtSel.value = "";
+        }
+    }
+
+    // Update Location Dropdown
+    locationSel.innerHTML = '<option value="">All Locations</option>';
+    availableLocs.sort((a,b) => a.name.localeCompare(b.name));
+    
+    availableLocs.forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc.id; opt.textContent = loc.name; locationSel.appendChild(opt);
+    });
+}
+// Helper to safely get metadata
+function getMetaForLoc(loc) {
+    if (!storeMetadataCache) return null;
+    const locName = loc.name.toLowerCase();
+    return storeMetadataCache.find(m => {
+        if (m.site && m.site.length > 2 && locName.includes(m.site)) return true;
+        if (m.store && locName.includes(m.store.toLowerCase())) return true;
+        return false;
+    });
+}
 function populateGridFilters() {
-    // 1. Get the dropdown elements
-    // We target Ops Grid, Safety Grid, AND the new Probe filters
+    // 1. Define Filters
     const marketSelects = [
-        document.getElementById('marketFilter'), 
-        document.getElementById('safetyMarketFilter'),
-        document.getElementById('probeMarketFilter_v2') 
+        document.getElementById('marketFilter'),      // Inspector
+        document.getElementById('gridMarketFilter'),  // DFSL Grid (New)
+        document.getElementById('safetyMarketFilter'), // Safety
+        document.getElementById('probeMarketFilter_v2') // Probe
     ];
     const districtSelects = [
         document.getElementById('districtFilter'), 
@@ -399,115 +548,66 @@ function populateGridFilters() {
         document.getElementById('probeDistrictFilter_v2')
     ];
 
-    // 2. Calculate unique Markets and Districts from CSV Metadata
-    const markets = [...new Set(storeMetadataCache.map(i => i.market).filter(Boolean))].sort();
-    const districts = [...new Set(storeMetadataCache.map(i => i.district).filter(Boolean))].sort();
+    let availableMarkets = new Set();
+    let availableDistricts = new Set();
 
-    // ---------------------------------------------------------
-    // START OF HIERARCHY LOGIC
-    // ---------------------------------------------------------
+    // 2. Build Lists from Cache
+    if (locationsCache.length > 0 && storeMetadataCache.length > 0) {
+        locationsCache.forEach(loc => {
+            const meta = getMetaForLoc(loc);
+            if(meta) {
+                if(meta.market) availableMarkets.add(meta.market.trim());
+                if(meta.district) availableDistricts.add(meta.district.trim());
+            }
+        });
+    }
 
-    // 3. Populate MARKET Dropdowns
-    marketSelects.forEach(sel => {
-        if(!sel) return;
-        
-        // Reset contents
-        sel.innerHTML = '<option value="">All Markets</option>';
-        sel.disabled = false; // Default to enabled
+    const sortedMarkets = Array.from(availableMarkets).sort();
+    const sortedDistricts = Array.from(availableDistricts).sort();
 
-        // ROLE: MARKET OPERATOR -> Locked to Scope
-        if (userProfile.role === 'market') {
-            sel.innerHTML = `<option value="${userProfile.scope}">${userProfile.scope}</option>`;
-            sel.value = userProfile.scope;
-            sel.disabled = true;
-        } 
-        // ROLE: DISTRICT MANAGER -> Locked to Parent Market
-        else if (userProfile.role === 'district') {
-            const parentMeta = storeMetadataCache.find(m => m.district === userProfile.scope);
-            const parentMarket = parentMeta ? parentMeta.market : "Unknown";
-
-            sel.innerHTML = `<option value="${parentMarket}">${parentMarket}</option>`;
-            sel.value = parentMarket;
-            sel.disabled = true;
-        }
-        // ROLE: STORE / SITE -> Locked to Parent Market
-        else if (userProfile.role === 'store') {
-            // Find metadata using the Store Name (Scope)
-            // We use fuzzy matching to be safe, similar to fetchLocations
-            const myMeta = storeMetadataCache.find(m => 
-                m.store.toLowerCase().trim() === userProfile.scope.toLowerCase().trim() ||
-                userProfile.scope.toLowerCase().includes(m.store.toLowerCase())
-            );
-            const myMarket = myMeta ? myMeta.market : "Unknown";
-
-            sel.innerHTML = `<option value="${myMarket}">${myMarket}</option>`;
-            sel.value = myMarket;
-            sel.disabled = true;
-        }
-        // ROLE: ADMIN -> Full List
-        else {
-            markets.forEach(m => {
+    // 3. Helper to Fill Dropdowns
+    const fillDropdown = (selectElements, items, defaultLabel) => {
+        selectElements.forEach(sel => {
+            if(!sel) return; 
+            const currentVal = sel.value;
+            sel.innerHTML = `<option value="">${defaultLabel}</option>`;
+            items.forEach(item => {
                 const opt = document.createElement('option');
-                opt.value = m; 
-                opt.textContent = m; 
-                sel.appendChild(opt);
+                opt.value = item; opt.textContent = item; sel.appendChild(opt);
             });
-        }
-    });
+            if (currentVal && items.includes(currentVal)) sel.value = currentVal;
+        });
+    };
 
-    // 4. Populate DISTRICT Dropdowns
-    districtSelects.forEach(sel => {
-        if(!sel) return;
+    fillDropdown(marketSelects, sortedMarkets, "All Markets");
+    fillDropdown(districtSelects, sortedDistricts, "All Districts");
 
-        // Reset contents
-        sel.innerHTML = '<option value="">All Districts</option>';
-        sel.disabled = false; // Default to enabled
+    // 4. NEW: Fill the Safety Location Dropdown
+    const safetyLocSel = document.getElementById('safetyLocationFilter');
+    if (safetyLocSel && locationsCache.length > 0) {
+        const currentLoc = safetyLocSel.value;
+        safetyLocSel.innerHTML = '<option value="">All Locations</option>';
+        locationsCache.sort((a,b) => a.name.localeCompare(b.name)).forEach(loc => {
+            const opt = document.createElement('option');
+            opt.value = loc.id; opt.textContent = loc.name; safetyLocSel.appendChild(opt);
+        });
+        if(currentLoc) safetyLocSel.value = currentLoc;
+    }
 
-        // ROLE: DISTRICT MANAGER -> Locked to Scope
-        if (userProfile.role === 'district') {
-            sel.innerHTML = `<option value="${userProfile.scope}">${userProfile.scope}</option>`;
-            sel.value = userProfile.scope;
-            sel.disabled = true;
-        }
-        // ROLE: STORE / SITE -> Locked to Parent District
-        else if (userProfile.role === 'store') {
-            const myMeta = storeMetadataCache.find(m => 
-                m.store.toLowerCase().trim() === userProfile.scope.toLowerCase().trim() ||
-                userProfile.scope.toLowerCase().includes(m.store.toLowerCase())
-            );
-            const myDistrict = myMeta ? myMeta.district : "Unknown";
-
-            sel.innerHTML = `<option value="${myDistrict}">${myDistrict}</option>`;
-            sel.value = myDistrict;
-            sel.disabled = true;
-        }
-        // ROLE: MARKET OPERATOR -> Filtered list of THEIR districts
-        else if (userProfile.role === 'market') {
-            const childDistricts = [...new Set(
-                storeMetadataCache
-                    .filter(m => m.market === userProfile.scope)
-                    .map(m => m.district)
-                    .filter(Boolean)
-            )].sort();
-
-            childDistricts.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d; 
-                opt.textContent = d; 
-                sel.appendChild(opt);
-            });
-        }
-        // ROLE: ADMIN -> Full List
-        else {
-            districts.forEach(d => {
-                const opt = document.createElement('option');
-                opt.value = d; 
-                opt.textContent = d; 
-                sel.appendChild(opt);
-            });
-        }
-    });
+    // 5. Initialize Main Grid Hierarchy (with safety check)
+    if (typeof updateOpsGridHierarchy === 'function') {
+        const mainMarket = document.getElementById('marketFilter');
+        if (mainMarket) updateOpsGridHierarchy('init');
+    }
+// TRIGGER UPDATES FOR ALL GRIDS
+    if (typeof updateOpsGridHierarchy === 'function') updateOpsGridHierarchy('init');
+    if (typeof updateGridFilters === 'function') updateGridFilters('init'); // <-- ADD THIS
+    if (typeof updateSafetyFilters === 'function') updateSafetyFilters('init');
 }
+// 6. Initialize Safety Grid Hierarchy
+    if (typeof updateSafetyFilters === 'function') {
+        updateSafetyFilters('init');
+    }
 
 // --- Tab Switching (With Hash Persistence) ---
 function switchTab(tabName) {
@@ -555,73 +655,91 @@ function showMobileDetail(sidebarId, detailId) {
 }
 
 async function fetchLocations() {
-    // 1. Get the dropdown elements (Same as before)
+    // 1. Get Dropdown Elements
     const select = document.getElementById('locationSelect');
     const reportSelect = document.getElementById('reportLocationSelect');
     const auditSelect = document.getElementById('auditLocationSelect');
     
     try {
-        // 2. Fetch ALL locations from Jolt API (Same as before)
+        console.log("--- START FETCH LOCATIONS ---");
+        console.log("User Role:", userProfile.role);
+        console.log("User Scope (Raw):", userProfile.scope);
+
+        // 2. Fetch ALL locations from Jolt API
         const query = `query GetLocations { company { locations { id name } } }`;
         const data = await joltFetch(query);
         let rawLocations = data.data?.company?.locations || [];
+        
+        console.log(`Jolt returned ${rawLocations.length} total locations.`);
 
-        // ---------------------------------------------------------
-        // START OF NEW CHANGES
-        // ---------------------------------------------------------
+        // 3. Filter Locations based on Permissions
+        locationsCache = rawLocations.filter(loc => {
+            // ADMIN: Access All
+            if (!userProfile.role || userProfile.role === 'admin') return true;
 
-        // 3. Filter the raw list based on the logged-in User's Profile
-        // We act as a "gatekeeper" here.
-      // ... inside fetchLocations ...
-locationsCache = rawLocations.filter(loc => {
-    // 1. ADMIN
-    if (!userProfile.role || userProfile.role === 'admin') return true;
+            const locName = loc.name.toLowerCase().trim();
+            
+            // Prepare Scope List: "Store A, Store B" -> ["store a", "store b"]
+            const rawScope = userProfile.scope || "";
+            const userScopes = rawScope.split(',').map(s => s.trim().toLowerCase()).filter(s => s.length > 0);
 
-    // 2. STORE / SITE ROLE (New Logic)
-    if (userProfile.role === 'store') {
-        // Precise match: Scope must match Location Name (e.g. "South 48")
-        // OR Fuzzy match if you prefer
-        return loc.name.toLowerCase().trim() === userProfile.scope.toLowerCase().trim();
-    }
+            // --- RULE 1: STORE ROLE (The Fix) ---
+            if (userProfile.role === 'store') {
+                // Check if ANY of the user's scope strings appear inside the location name
+                // Example: User has "Post Falls". Location is "001 - Post Falls".
+                // "001 - post falls".includes("post falls") === TRUE.
+                const isMatch = userScopes.some(scopeItem => locName.includes(scopeItem));
+                
+                if (isMatch) console.log(`✅ Access Granted: [${loc.name}] matched scope criteria.`);
+                return isMatch;
+            }
 
-    // 3. MARKET & DISTRICT (Existing Logic)
-    const meta = storeMetadataCache.find(m => {
-        const locName = loc.name.toLowerCase();
-        if (m.site && m.site.length > 2 && locName.includes(m.site)) return true;
-        if (m.store && locName.includes(m.store.toLowerCase())) return true;
-        return false;
-    });
+            // --- RULE 2: MARKET / DISTRICT ROLE ---
+            // We need metadata to link a Location to a Market/District
+            const meta = storeMetadataCache.find(m => {
+                if (m.site && m.site.length > 2 && locName.includes(m.site)) return true;
+                if (m.store && locName.includes(m.store.toLowerCase())) return true;
+                return false;
+            });
 
-    if (!meta) return false; 
+            if (!meta) {
+                // console.log(`❌ No Metadata for: ${loc.name}`);
+                return false; 
+            }
 
-    if (userProfile.role === 'market') return meta.market === userProfile.scope;
-    if (userProfile.role === 'district') return meta.district === userProfile.scope;
+            // Check against Market/District List
+            if (userProfile.role === 'market') {
+                return userScopes.includes(meta.market.toLowerCase().trim());
+            }
+            if (userProfile.role === 'district') {
+                return userScopes.includes(meta.district.toLowerCase().trim());
+            }
 
-    return false;
-});
+            return false;
+        });
 
-        // ---------------------------------------------------------
-        // END OF NEW CHANGES
-        // ---------------------------------------------------------
+        console.log(`Final Access Count: ${locationsCache.length} locations.`);
 
-        // 4. Sort the FILTERED list (Same as before)
+        // 4. Sort & Populate Dropdowns
         locationsCache.sort((a, b) => a.name.localeCompare(b.name));
         
-        // 5. Populate the dropdowns with the FILTERED list (Same as before)
         [select, reportSelect, auditSelect].forEach(sel => {
             if(!sel) return;
             sel.innerHTML = '';
             if (locationsCache.length === 0) { 
                 sel.innerHTML = '<option>No Access / No Locations</option>'; 
-                return; 
+            } else {
+                locationsCache.forEach(loc => {
+                    const opt = document.createElement('option');
+                    opt.value = loc.id; 
+                    opt.textContent = loc.name; 
+                    sel.appendChild(opt);
+                });
             }
-            locationsCache.forEach(loc => {
-                const opt = document.createElement('option');
-                opt.value = loc.id; 
-                opt.textContent = loc.name; 
-                sel.appendChild(opt);
-            });
         });
+
+        // 5. Update Grid Filters (Ops, Safety, Probe)
+        populateGridFilters();
 
     } catch (err) { 
         handleError(err, "fetching locations"); 
@@ -799,10 +917,13 @@ async function fetchAudits() {
 
 // --- OPS GRID VIEW LOGIC ---
 // --- OPS GRID VIEW LOGIC ---
+// --- UPDATED OPS GRID LOADER ---
 async function loadStoreGrid() {
     const dateStr = document.getElementById('gridDate').value;
-    const selMarket = document.getElementById('marketFilter').value;
-    const selDistrict = document.getElementById('districtFilter').value;
+
+    const selMarket = document.getElementById('gridMarketFilter').value.trim();
+    const selDistrict = document.getElementById('gridDistrictFilter').value.trim();
+    const selLocationId = document.getElementById('gridLocationFilter').value;
 
     if (!dateStr) { alert("Please select date."); return; }
     const overlay = document.getElementById('loadingOverlay');
@@ -816,19 +937,22 @@ async function loadStoreGrid() {
     const tbody = document.querySelector('#storeTable tbody');
     tbody.innerHTML = '';
 
-    // Filter locationsCache based on Metadata
+    // Filter locations based on ALL dropdowns
+    // Filter locations based on ALL dropdowns
     let filteredLocations = locationsCache;
-    if(storeMetadataCache.length > 0 && (selMarket || selDistrict)) {
+    
+    // If a specific location is selected, that overrides everything else
+    if (selLocationId) {
+        filteredLocations = locationsCache.filter(l => l.id === selLocationId);
+    } 
+    // Otherwise use Market/District filters
+    else if (storeMetadataCache.length > 0 && (selMarket || selDistrict)) {
         filteredLocations = locationsCache.filter(loc => {
-            const locName = loc.name.toLowerCase().trim();
-            const meta = storeMetadataCache.find(m => {
-                if (m.site && m.site.length > 2 && locName.includes(m.site)) return true;
-                if (m.store && locName.includes(m.store.toLowerCase())) return true;
-                return false;
-            });
+            const meta = getMetaForLoc(loc);
             if(!meta) return false;
-            if(selMarket && meta.market !== selMarket) return false;
-            if(selDistrict && meta.district !== selDistrict) return false;
+            // ROBUST MATCHING: Use trim()
+            if(selMarket && meta.market.trim() !== selMarket) return false;
+            if(selDistrict && meta.district.trim() !== selDistrict) return false;
             return true;
         });
     }
@@ -840,7 +964,7 @@ async function loadStoreGrid() {
     }
 
     // Process concurrently in chunks to speed up loading
-const chunkSize = 3; // Reduced from 5 to 3 for stability
+const chunkSize = 3; 
     for (let i = 0; i < filteredLocations.length; i += chunkSize) {
         const chunk = filteredLocations.slice(i, i + chunkSize);
         loadText.innerText = `Processing stores ${i + 1} - ${Math.min(i + chunkSize, filteredLocations.length)} of ${filteredLocations.length}`;
@@ -848,19 +972,26 @@ const chunkSize = 3; // Reduced from 5 to 3 for stability
         await Promise.all(chunk.map(async (loc) => {
             try {
                 const lists = await fetchListsForLocation(loc.id, startTs, endTs);
+                
+                // 1. Initialize rowData for the Grid
                 let rowData = { name: loc.name, id: loc.id, dp1: { status: 'Missing', score: null }, dp3: { status: 'Missing', score: null }, dp5: { status: 'Missing', score: null }, sanitizer: 'OK' };
-                let locReport = { name: loc.name, id: loc.id, lists: [] };
+                
+                // 2. FIX: Initialize locReport for the Drill-down/Modal
+                let locReport = { id: loc.id, name: loc.name, lists: [] };
+
                 let hasExpired = false; let hasExpiring = false; let hasWarning = false;
 
                 lists.forEach(list => {
                     const title = (list.listTemplate && list.listTemplate.title) ? list.listTemplate.title : (list.instanceTitle || "Untitled");
                     const titleLower = title.toLowerCase();
+                    
                     if (list.itemResults) {
                         const expStatus = checkExpirationStatus(list.itemResults);
                         if (expStatus.expired) hasExpired = true;
                         if (expStatus.expiring) hasExpiring = true;
                         if (expStatus.warning) hasWarning = true;
                     }
+                    
                     if (titleLower.includes('dfsl') || titleLower.includes('fsl')) {
                         let bucket = null;
                         if (titleLower.includes('daypart 1')) bucket = 'dp1';
@@ -869,7 +1000,10 @@ const chunkSize = 3; // Reduced from 5 to 3 for stability
 
                         if (bucket) {
                             const stats = extractReportStats(list.itemResults);
+                            
+                            // 3. FIX: Now this works because locReport is defined above
                             locReport.lists.push({ type: bucket, title: title, stats: stats, itemResults: list.itemResults });
+                            
                             let statusText = "In Progress";
                             if (list.incompleteCount === 0) statusText = "Complete";
                             else if (list.deadlineTimestamp > 0 && list.deadlineTimestamp < now) statusText = "Late";
@@ -890,20 +1024,15 @@ const chunkSize = 3; // Reduced from 5 to 3 for stability
                 else if (hasExpiring) rowData.sanitizer = "Expiring";
                 else if (hasWarning) rowData.sanitizer = "Warning";
 
+                // 4. FIX: Save the report data to the global cache so the button click works later
+                reportDataCache.push(locReport);
+                
                 gridDataCache.push(rowData);
-                if(locReport.lists.length > 0) reportDataCache.push(locReport);
                 renderGridRow(tbody, rowData);
 
-            } catch(e) { 
-                console.error("Grid Error " + loc.name, e);
-                // RENDER ERROR ROW
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td><strong>${loc.name}</strong></td><td colspan="4" style="color:red; text-align:center;">Error loading data: ${e.message}</td>`;
-                tbody.appendChild(tr);
-            }
+            } catch(e) { console.error(e); }
         }));
-        await delay(500); // 0.5 second pause between chunks to prevent timeouts
-    
+        await delay(500);
     }
     overlay.style.display = 'none';
 }
@@ -912,8 +1041,15 @@ const chunkSize = 3; // Reduced from 5 to 3 for stability
 // --- SAFETY GRID VIEW LOGIC ---
 async function loadSafetyGrid() {
     const monthStr = document.getElementById('safetyMonth').value;
-    const selMarket = document.getElementById('safetyMarketFilter').value;
-    const selDistrict = document.getElementById('safetyDistrictFilter').value;
+    
+    // 1. GET VALUES (Use .trim() to clean accidental spaces)
+    const rawMarket = document.getElementById('safetyMarketFilter').value || "";
+    const rawDistrict = document.getElementById('safetyDistrictFilter').value || "";
+    // This is the new ID we added in Step 1
+    const rawLocationId = document.getElementById('safetyLocationFilter')?.value || "";
+
+    const selMarket = rawMarket.trim();
+    const selDistrict = rawDistrict.trim();
 
     if (!monthStr) { alert("Please select a month."); return; }
     
@@ -931,22 +1067,29 @@ async function loadSafetyGrid() {
     const tbody = document.querySelector('#safetyTable tbody');
     tbody.innerHTML = '';
 
-    // Filter Locations
+    // --- FILTER LOGIC START ---
     let filteredLocations = locationsCache;
-    if(storeMetadataCache.length > 0 && (selMarket || selDistrict)) {
+
+    // A. If specific Location is selected, ignore Market/District
+    if (rawLocationId) {
+        filteredLocations = locationsCache.filter(l => l.id === rawLocationId);
+    } 
+    // B. Otherwise, filter by Market/District
+    else if (storeMetadataCache.length > 0 && (selMarket || selDistrict)) {
         filteredLocations = locationsCache.filter(loc => {
-            const locName = loc.name.toLowerCase().trim();
-            const meta = storeMetadataCache.find(m => {
-                if (m.site && m.site.length > 2 && locName.includes(m.site)) return true;
-                if (m.store && locName.includes(m.store.toLowerCase())) return true;
-                return false;
-            });
+            const meta = getMetaForLoc(loc); // Use the helper
             if(!meta) return false;
-            if(selMarket && meta.market !== selMarket) return false;
-            if(selDistrict && meta.district !== selDistrict) return false;
+            
+            // Check Market (Loose match)
+            if(selMarket && meta.market.trim() !== selMarket) return false;
+            
+            // Check District (Loose match)
+            if(selDistrict && meta.district.trim() !== selDistrict) return false;
+            
             return true;
         });
     }
+    // --- FILTER LOGIC END ---
 
     if(filteredLocations.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:30px;">No stores match the current filters.</td></tr>';
@@ -954,21 +1097,22 @@ async function loadSafetyGrid() {
         return;
     }
 
-const chunkSize = 3; // Reduced from 5 to 3 for stability
+    const chunkSize = 3; 
     for (let i = 0; i < filteredLocations.length; i += chunkSize) {
         const chunk = filteredLocations.slice(i, i + chunkSize);
         loadText.innerText = `Processing stores ${i + 1} - ${Math.min(i + chunkSize, filteredLocations.length)} of ${filteredLocations.length}`;
+        
         await Promise.all(chunk.map(async (loc) => {
             try {
                 const lists = await fetchListsForLocation(loc.id, startTs, endTs);
                 
-                // Find Audit
+                // Find Audit (Case insensitive search)
                 const auditList = lists.find(l => {
                     const t = (l.listTemplate && l.listTemplate.title) ? l.listTemplate.title.toLowerCase() : "";
                     return t.includes("monthly safety audit");
                 });
                 
-                // Find Agenda
+                // Find Agenda (Case insensitive search)
                 const agendaList = lists.find(l => {
                     const t = (l.listTemplate && l.listTemplate.title) ? l.listTemplate.title.toLowerCase() : "";
                     return t.includes("safety committee agenda");
@@ -991,13 +1135,12 @@ const chunkSize = 3; // Reduced from 5 to 3 for stability
                 renderSafetyGridRow(tbody, rowData);
             } catch(e) { 
                 console.error("Safety Grid Error " + loc.name, e);
-                // RENDER ERROR ROW
                 const tr = document.createElement('tr');
                 tr.innerHTML = `<td><strong>${loc.name}</strong></td><td colspan="3" style="color:red; text-align:center;">Error: ${e.message}</td>`;
                 tbody.appendChild(tr);
             }
         }));
-        await delay(500); // 0.5 second pause between chunks to prevent timeouts
+        await delay(500); 
     }
     overlay.style.display = 'none';
 }
@@ -1891,27 +2034,77 @@ const SENSOR_TEMPLATE_IDS = [
 ];
 
 let probeGridDataCache_v2 = [];
-
+function getLocalTodayStr() {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+}
 // --- CASCADING FILTER LOGIC ---
+// FIXED: Added 'retryCount = 0' parameter to define the variable
+// FIXED: Robust Local Date Handling
 function initProbeFilters_v2(retryCount = 0) {
-    const marketSel = document.getElementById('probeMarketFilter_v2');
-    if(!marketSel) return;
     
-    if ((!storeMetadataCache || storeMetadataCache.length === 0) && retryCount < 10) {
-        setTimeout(() => initProbeFilters_v2(retryCount + 1), 500);
+    // 1. Wait for locations to load (Retry Logic)
+    if (locationsCache.length === 0) {
+        if (retryCount < 10) {
+            setTimeout(() => initProbeFilters_v2(retryCount + 1), 500);
+        } else {
+            console.warn("Probe Filters: Locations failed to load.");
+        }
         return;
     }
 
-    const meta = storeMetadataCache || []; 
-    const markets = [...new Set(meta.map(i => i.market).filter(Boolean))].sort();
+    // 2. Force Local Date (The 'en-CA' locale always outputs YYYY-MM-DD)
+    // This is the most reliable way to get "My Computer's Date"
+    const now = new Date();
+    const todayStr = now.toLocaleDateString('en-CA'); 
 
-    marketSel.innerHTML = '<option value="">All Markets</option>';
-    markets.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m; opt.textContent = m; marketSel.appendChild(opt);
-    });
+    console.log("Setting Probe Date to Local Time:", todayStr); // Check console if this is wrong
+
+    const startEl = document.getElementById('probeStartDate');
+    const endEl = document.getElementById('probeEndDate');
     
-    updateProbeFilters_v2('market');
+    // Only set if empty (prevents overwriting if you change tabs)
+    if (startEl && !startEl.value) startEl.value = todayStr;
+    if (endEl && !endEl.value) endEl.value = todayStr;
+
+    // 3. Populate Filters
+    const marketSel = document.getElementById('probeMarketFilter_v2');
+    const districtSel = document.getElementById('probeDistrictFilter_v2');
+    const locationSel = document.getElementById('probeLocationFilter_v2');
+
+    if (!marketSel || !districtSel || !locationSel) return;
+
+    let availableMarkets = new Set();
+    let availableDistricts = new Set();
+
+    locationsCache.forEach(loc => {
+        const meta = (typeof getMetaForLoc === 'function') ? getMetaForLoc(loc) : null;
+        if (meta) {
+            if (meta.market) availableMarkets.add(meta.market.trim());
+            if (meta.district) availableDistricts.add(meta.district.trim());
+        }
+    });
+
+    const fill = (sel, items, label) => {
+        sel.innerHTML = `<option value="">${label}</option>`;
+        Array.from(items).sort().forEach(i => {
+            const opt = document.createElement('option');
+            opt.value = i; opt.textContent = i; sel.appendChild(opt);
+        });
+    };
+
+    fill(marketSel, availableMarkets, "All Markets");
+    fill(districtSel, availableDistricts, "All Districts");
+    
+    // Fill Locations
+    locationSel.innerHTML = '<option value="">All Locations</option>';
+    locationsCache.sort((a,b) => a.name.localeCompare(b.name)).forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc.id; opt.textContent = loc.name; locationSel.appendChild(opt);
+    });
 }
 
 function updateProbeFilters_v2(changedType) {
@@ -2160,3 +2353,69 @@ window.addEventListener('DOMContentLoaded', () => {
     initProbeFilters_v2();
 });
 /* --- END PROBE LOGIC (V4) --- */
+// --- SAFETY GRID FILTER LOGIC (Cascading) ---
+// --- SAFETY GRID FILTER LOGIC (Robust) ---
+function updateSafetyFilters(source) {
+    const marketSel = document.getElementById('safetyMarketFilter');
+    const districtSel = document.getElementById('safetyDistrictFilter');
+    const locationSel = document.getElementById('safetyLocationFilter');
+
+    if (!marketSel || !districtSel || !locationSel) return;
+
+    const selectedMarket = marketSel.value.trim();
+    const selectedDistrict = districtSel.value.trim();
+
+    let availableLocs = locationsCache;
+
+    // Filter by Market
+    if (selectedMarket) {
+        availableLocs = availableLocs.filter(loc => {
+            const meta = getMetaForLoc(loc);
+            return meta && meta.market.trim() === selectedMarket;
+        });
+    }
+
+    // Filter by District
+    if (source === 'district' && selectedDistrict) {
+        availableLocs = availableLocs.filter(loc => {
+            const meta = getMetaForLoc(loc);
+            return meta && meta.district.trim() === selectedDistrict;
+        });
+    }
+
+    // Update District Dropdown
+    if (source === 'market' || source === 'init') {
+        const uniqueDistricts = new Set();
+        availableLocs.forEach(loc => {
+            const meta = getMetaForLoc(loc);
+            if (meta && meta.district) uniqueDistricts.add(meta.district.trim());
+        });
+        
+        const oldDist = districtSel.value;
+        
+        districtSel.innerHTML = '<option value="">All Districts</option>';
+        Array.from(uniqueDistricts).sort().forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            districtSel.appendChild(opt);
+        });
+        
+        if (source === 'init' && oldDist && uniqueDistricts.has(oldDist)) {
+             districtSel.value = oldDist;
+        } else {
+            districtSel.value = "";
+        }
+    }
+
+    // Update Location Dropdown
+    locationSel.innerHTML = '<option value="">All Locations</option>';
+    availableLocs.sort((a,b) => a.name.localeCompare(b.name));
+    
+    availableLocs.forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc.id;
+        opt.textContent = loc.name;
+        locationSel.appendChild(opt);
+    });
+}
