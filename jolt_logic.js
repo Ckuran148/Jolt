@@ -53,6 +53,7 @@ function getMetaForLoc(loc) {
         return false;
     });
 }
+
 function calculateDuration(items) {
     if (!items || !Array.isArray(items)) return { text: null, seconds: null };
     let timestamps = [];
@@ -74,6 +75,23 @@ function calculateDuration(items) {
             return { text: "< 1m", seconds: 0 };
     }
     return { text: null, seconds: null };
+}
+
+function countCorrectiveActions(items) {
+    let count = 0;
+    if (!items || !Array.isArray(items)) return 0;
+    const traverse = (nodes) => {
+        nodes.forEach(node => {
+            if (node.correctiveActions && node.correctiveActions.length > 0) {
+                count++;
+            }
+            if (node.subList && node.subList.itemResults) {
+                traverse(node.subList.itemResults);
+            }
+        });
+    };
+    traverse(items);
+    return count;
 }
 
 function checkExpirationStatus(items) {
@@ -540,12 +558,14 @@ function populateGridFilters() {
         document.getElementById('marketFilter'),      // Inspector
         document.getElementById('gridMarketFilter'),  // DFSL Grid (New)
         document.getElementById('safetyMarketFilter'), // Safety
-        document.getElementById('probeMarketFilter_v2') // Probe
+        document.getElementById('probeMarketFilter_v2'), // Probe
+        document.getElementById('sensorMarketFilter') // Sensors
     ];
     const districtSelects = [
         document.getElementById('districtFilter'), 
         document.getElementById('safetyDistrictFilter'),
-        document.getElementById('probeDistrictFilter_v2')
+        document.getElementById('probeDistrictFilter_v2'),
+        document.getElementById('sensorDistrictFilter')
     ];
 
     let availableMarkets = new Set();
@@ -603,6 +623,7 @@ function populateGridFilters() {
     if (typeof updateOpsGridHierarchy === 'function') updateOpsGridHierarchy('init');
     if (typeof updateGridFilters === 'function') updateGridFilters('init'); // <-- ADD THIS
     if (typeof updateSafetyFilters === 'function') updateSafetyFilters('init');
+    if (typeof updateSensorFilters === 'function') updateSensorFilters('init');
 }
 // 6. Initialize Safety Grid Hierarchy
     if (typeof updateSafetyFilters === 'function') {
@@ -797,6 +818,7 @@ async function fetchChecklists() {
         let durationTxt = "N/A";
         let integrityBadge = "";
         let scoreVal = "N/A";
+        let caBadge = "";
         let expiryIndicator = "";
 
         if (list.itemResults) {
@@ -815,6 +837,12 @@ async function fetchChecklists() {
                 else if (scoreData.score < 85) badgeClass = 'integrity-med';
                 integrityBadge = `<span class="integrity-badge ${badgeClass}">${scoreVal}</span>`;
             }
+
+            const caCount = countCorrectiveActions(list.itemResults);
+            if (caCount > 0) {
+                caBadge = `<span style="font-size:0.8rem; margin-left:5px; color:#991b1b; background:#fee2e2; padding:1px 4px; border-radius:4px;">⚠️ ${caCount}</span>`;
+            }
+
             const expStatus = checkExpirationStatus(list.itemResults);
             if (expStatus.expired) expiryIndicator = "🔴";
             else if (expStatus.expiring) expiryIndicator = "🟡";
@@ -837,6 +865,7 @@ async function fetchChecklists() {
             <div class="list-stats">
                 <span>⏱️ ${durationTxt}</span>
                 ${integrityBadge ? `<span>🛡️ ${integrityBadge}</span>` : ''}
+                ${caBadge}
             </div>
         `;
         item.onclick = () => {
@@ -974,7 +1003,14 @@ const chunkSize = 3;
                 const lists = await fetchListsForLocation(loc.id, startTs, endTs);
                 
                 // 1. Initialize rowData for the Grid
-                let rowData = { name: loc.name, id: loc.id, dp1: { status: 'Missing', score: null }, dp3: { status: 'Missing', score: null }, dp5: { status: 'Missing', score: null }, sanitizer: 'OK' };
+                let rowData = { 
+                    name: loc.name, 
+                    id: loc.id, 
+                    dp1: { status: 'Missing', score: null, duration: null, caCount: 0 }, 
+                    dp3: { status: 'Missing', score: null, duration: null, caCount: 0 }, 
+                    dp5: { status: 'Missing', score: null, duration: null, caCount: 0 }, 
+                    sanitizer: 'OK' 
+                };
                 
                 // 2. FIX: Initialize locReport for the Drill-down/Modal
                 let locReport = { id: loc.id, name: loc.name, lists: [] };
@@ -1009,13 +1045,23 @@ const chunkSize = 3;
                             else if (list.deadlineTimestamp > 0 && list.deadlineTimestamp < now) statusText = "Late";
                             
                             let integrityVal = "";
-                            if (list.incompleteCount === 0 && list.itemResults) {
+                            let durationText = null;
+                            let caCount = 0;
+
+                            if (list.itemResults) {
                                 const dur = calculateDuration(list.itemResults);
-                                const scoreData = calculateIntegrity(list.itemResults, title, dur.seconds);
-                                if (scoreData.score !== null) integrityVal = scoreData.score + "%";
+                                durationText = dur.text;
+                                caCount = countCorrectiveActions(list.itemResults);
+
+                                if (list.incompleteCount === 0) {
+                                    const scoreData = calculateIntegrity(list.itemResults, title, dur.seconds);
+                                    if (scoreData.score !== null) integrityVal = scoreData.score + "%";
+                                }
                             }
                             rowData[bucket].status = statusText;
                             rowData[bucket].score = integrityVal;
+                            rowData[bucket].duration = durationText;
+                            rowData[bucket].caCount = caCount;
                         }
                     }
                 });
@@ -1659,12 +1705,23 @@ function renderGridRow(tbody, data) {
         else if (cellData.status === "Late") statusClass = "ls-late";
         else if (cellData.status === "In Progress") statusClass = "ls-progress";
         let html = `<div class="grid-cell-content"><span class="list-status ${statusClass}">${cellData.status}</span>`;
+        
+        html += `<div style="display:flex; gap:6px; margin-top:4px; justify-content:center; align-items:center; font-size:0.75rem;">`;
+
+        if (cellData.duration) {
+            html += `<span style="color:#555;">⏱️ ${cellData.duration}</span>`;
+        }
+
         if (cellData.score) {
                 let color = "green"; const num = parseInt(cellData.score);
                 if (num < 60) color = "red"; else if (num < 85) color = "#b8860b";
-                html += `<span class="grid-score" style="color:${color}">🛡️ ${cellData.score}</span>`;
+                html += `<span style="color:${color}; font-weight:bold;">🛡️ ${cellData.score}</span>`;
         }
-        html += `</div>`;
+
+        if (cellData.caCount > 0) {
+            html += `<span style="color:#991b1b; background:#fee2e2; padding:1px 4px; border-radius:4px;">⚠️ ${cellData.caCount}</span>`;
+        }
+        html += `</div></div>`;
         return html;
     };
     let sanHtml = `<span style="color:green; font-weight:bold;">OK</span>`;
@@ -1739,7 +1796,7 @@ function exportGridToCSV() {
 }
 
 async function fetchListsForLocation(locationId, start, end) {
-    const ITEM_FIELDS = `id type __typename resultValue resultText resultDouble isMarkedNA completionTimestamp resultAssets { id name } resultCompanyFiles { fileURI } peripheral { type } itemTemplate { text type isScoringItemType isRequired } notes { body }`;
+    const ITEM_FIELDS = `id type __typename resultValue resultText resultDouble isMarkedNA completionTimestamp resultAssets { id name } resultCompanyFiles { fileURI } peripheral { type } itemTemplate { text type isScoringItemType isRequired } notes { body } correctiveActions { id }`;
     const query = `query GetChecklists($filter: ListInstancesFilter!) { listInstances(filter: $filter) { id displayTimestamp deadlineTimestamp incompleteCount isActive instanceTitle score maxPossibleScore listTemplate { title } itemResults { ${ITEM_FIELDS} subList { id instanceTitle itemResults { ${ITEM_FIELDS} subList { id instanceTitle itemResults { ${ITEM_FIELDS} subList { id instanceTitle itemResults { ${ITEM_FIELDS} } } } } } } } } }`;
     const variables = { filter: { locationIds: [locationId], displayAfterTimestamp: start, displayBeforeTimestamp: end, isSublist: false } };
     try { const data = await joltFetch(query, variables); return data.data?.listInstances || []; } catch(e) { console.error(e); return []; }
@@ -1755,13 +1812,47 @@ async function renderListDetails(listData, containerId = 'detailView') {
     const dateObj = listData.displayTimestamp ? ((listData.displayTimestamp > 9999999999) ? new Date(listData.displayTimestamp) : new Date(listData.displayTimestamp * 1000)) : new Date();
     const dateStr = formatDateMMDDYYYY(dateObj);
 
+    // --- STATS CALCULATION (Moved to Header) ---
+    const items = listData.itemResults || [];
+    const durationInfo = calculateDuration(items);
+    let statsHtml = "";
+    
+    const targetLists = ['🟧', 'DFSL', 'FSL', 'Food Safety'];
+    const isTargetList = targetLists.some(tag => listName.includes(tag));
+
+    if (!isAuditOrAgenda) {
+        if (durationInfo.text) statsHtml += `<span style="margin-left:15px; font-size:0.9rem; color:#333; font-weight:normal;">⏱️ ${durationInfo.text}</span>`;
+        
+        if (isTargetList && listData.incompleteCount === 0) {
+            const scoreData = calculateIntegrity(items, listName, durationInfo.seconds);
+            let badgeClass = 'integrity-high';
+            let scoreDisplay = scoreData.score + "%";
+            if (scoreData.score === null) { badgeClass = 'integrity-na'; scoreDisplay = "N/A"; }
+            else if (scoreData.score < 60) badgeClass = 'integrity-low';
+            else if (scoreData.score < 85) badgeClass = 'integrity-med';
+            statsHtml += `<span class="integrity-badge ${badgeClass}" style="font-size:0.8rem; margin-left:10px; padding:2px 8px;">🛡️ ${scoreDisplay}</span>`;
+        }
+    }
+
+    const caCount = countCorrectiveActions(items);
+    if (caCount > 0) {
+        statsHtml += `<span style="font-size:0.8rem; margin-left:10px; color:#991b1b; background:#fee2e2; padding:2px 8px; border-radius:4px; border:1px solid #991b1b;">⚠️ ${caCount} Corrective Actions</span>`;
+    }
+
     let headerHtml = `
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; border-bottom:1px solid #eee; padding-bottom:10px;">
             <div>
-                <h3 style="margin:0;">${listName}</h3>
+                <h3 style="margin:0; display:flex; align-items:center; flex-wrap:wrap;">
+                    ${listName}
+                    ${statsHtml}
+                </h3>
                 <div style="font-size:12px; color:#555; margin-top:4px;">Date: ${dateStr}</div>
             </div>
-            <button class="btn-secondary no-print" style="padding:5px 10px; font-size:0.8rem;" onclick='exportListDetails(${JSON.stringify(listData.id)})'>Export List Details</button>
+            <div class="no-print" style="display:flex; gap:5px; flex-shrink:0;">
+                <button class="btn-secondary" style="padding:5px 10px; font-size:0.8rem;" onclick='expandAllSublists()'>Expand All</button>
+                <button class="btn-secondary" style="padding:5px 10px; font-size:0.8rem;" onclick='collapseAllSublists()'>Collapse All</button>
+                <button class="btn-secondary" style="padding:5px 10px; font-size:0.8rem;" onclick='exportListDetails(${JSON.stringify(listData.id)})'>Export</button>
+            </div>
         </div>`;
     
     // --- FIX: Use 'audit-score-header' class so it PRINTS ---
@@ -1776,29 +1867,7 @@ async function renderListDetails(listData, containerId = 'detailView') {
 
     container.innerHTML = headerHtml;
     window.currentDetailList = listData;
-    const items = listData.itemResults || [];
     if (items.length === 0) { container.innerHTML += `<p>No items found.</p>`; return; }
-    
-    const durationInfo = calculateDuration(items);
-    let durationHtml = "";
-    if (durationInfo.text && !isAuditOrAgenda) durationHtml = `<div><strong>⏱️ Total Time:</strong> ${durationInfo.text}</div>`;
-    
-    let integrityHtml = "";
-    const targetLists = ['🟧', 'DFSL', 'FSL', 'Food Safety'];
-    const isTargetList = targetLists.some(tag => listName.includes(tag));
-    
-    if (isTargetList && listData.incompleteCount === 0 && !isAuditOrAgenda) {
-        const scoreData = calculateIntegrity(items, listName, durationInfo.seconds);
-        let badgeClass = 'integrity-high';
-        let scoreDisplay = scoreData.score + "%";
-        if (scoreData.score === null) { badgeClass = 'integrity-na'; scoreDisplay = "N/A"; }
-        else if (scoreData.score < 60) badgeClass = 'integrity-low';
-        else if (scoreData.score < 85) badgeClass = 'integrity-med';
-        integrityHtml = `<div class="integrity-score ${badgeClass}">🛡️ Integrity Score: ${scoreDisplay} <span style="font-weight:normal; font-size:0.8rem; margin-left:10px;">(${scoreData.issues.join(', ') || 'Looks Good'})</span></div>`;
-    }
-    
-    // Keep duration/integrity in the meta container (which gets hidden on print)
-    if (!isAuditOrAgenda && (durationHtml || integrityHtml)) container.innerHTML += `<div class="checklist-meta">${durationHtml} ${integrityHtml}</div>`;
     
     const listContainer = document.createElement('div');
     items.forEach(item => { const el = createItemElement(item, isTargetList, isAuditOrAgenda); if (el) listContainer.appendChild(el); });
@@ -1816,6 +1885,13 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
     if (itemResult.itemTemplate && itemResult.itemTemplate.text) prompt = itemResult.itemTemplate.text; 
     else prompt = `Item ID: ${itemResult.id}`;
     
+    // Clean Prompt (Remove Markdown and Constraints)
+    prompt = prompt.replace(/[#*]/g, ''); 
+    prompt = prompt.split('Min:')[0];
+    prompt = prompt.split('Max:')[0];
+    prompt = prompt.split('Range:')[0];
+    prompt = prompt.trim();
+
     let entryClass = "checklist-entry";
     
     // Expiration Logic
@@ -1875,28 +1951,19 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
     if (photoUrl) { const safePrompt = escapeStr(prompt); photoBtnHtml = `<button class="photo-btn no-print" onclick="showPhoto('${safePrompt}', null, '${photoUrl}')">View Photo</button>`; } 
     else if (photoAsset) { const safeName = escapeStr(photoAsset.name); photoBtnHtml = `<button class="photo-btn no-print" onclick="showPhoto('${safeName}', '${photoAsset.id}', null)">View Photo Info</button>`; }
 
-    let html = `<div class="entry-header"><span class="entry-title">${prompt}</span><div class="entry-right" style="display:flex; align-items:center;">${valDisplay ? `<span class="entry-value">${valDisplay}</span>` : ''}${photoBtnHtml}<span class="status-badge ${statusClass}" style="margin-left:10px;">${statusText}</span></div></div>`;
-    
-    if (itemResult.notes && itemResult.notes.length > 0) { 
-        itemResult.notes.forEach(note => { if (note.body) html += `<div class="entry-notes">📝 ${note.body}</div>`; }); 
-    }
-    div.innerHTML = html;
+    let subIntegrityHtml = "";
+    let subDurationStr = "";
 
     if (hasSublist) {
-        const subContainer = document.createElement('div'); 
-        subContainer.className = 'sublist-container';
-        const subTitle = prompt; 
-        
-        let subIntegrityHtml = "";
         let subTimestamps = [];
         const collectSubTimestamps = (list) => { list.forEach(si => { if(si.completionTimestamp > 0) subTimestamps.push(si.completionTimestamp); }); }
         collectSubTimestamps(itemResult.subList.itemResults);
         
-        let subSeconds = null; let subDurationStr = "";
+        let subSeconds = null;
         if (subTimestamps.length >= 2) {
             subTimestamps.sort((a,b) => a-b); subSeconds = subTimestamps[subTimestamps.length-1] - subTimestamps[0];
             const mins = Math.floor(subSeconds / 60); const secs = subSeconds % 60;
-            subDurationStr = `<span class="duration-tag">⏱️ ${mins}m ${secs}s</span>`;
+            subDurationStr = `<span class="duration-tag" style="font-size:0.7rem; color:#555; margin-right:5px;">⏱️ ${mins}m ${secs}s</span>`;
         }
         
         if (isParentTargetList && subTimestamps.length >= 2) {
@@ -1905,10 +1972,35 @@ function createItemElement(itemResult, isParentTargetList, hideNA = false) {
             if (subScore.score === null) { badgeClass = 'integrity-na'; scoreDisplay = "N/A"; }
             else if (subScore.score < 60) badgeClass = 'integrity-low';
             else if (subScore.score < 85) badgeClass = 'integrity-med';
-            subIntegrityHtml = `<span class="integrity-badge ${badgeClass}" style="font-size:0.7rem; margin-left:8px;">🛡️ ${scoreDisplay}</span>`;
+            subIntegrityHtml = `<span class="integrity-badge ${badgeClass}" style="font-size:0.7rem; margin-right:5px; padding:1px 4px;">🛡️ ${scoreDisplay}</span>`;
         }
-        
-        subContainer.innerHTML = `<div class="sublist-header"><span>${subTitle} ${subIntegrityHtml}</span> ${subDurationStr}</div>`;
+    }
+
+    let caBtnHtml = '';
+    if (hasSublist) {
+        const subId = `sub-${itemResult.id}`;
+        caBtnHtml = `<button class="ca-btn no-print" onclick="toggleSublist('${subId}')" style="margin-left:5px; padding:2px 6px; font-size:0.7rem; background:#fee2e2; color:#991b1b; border:1px solid #991b1b; border-radius:4px; cursor:pointer;" title="Expand Corrective Action">Corrective Action! 🔻</button>`;
+        if (itemResult.correctiveActions && itemResult.correctiveActions.length > 0) {
+            caBtnHtml = `<button class="ca-btn no-print" onclick="toggleSublist('${subId}')" style="margin-left:5px; padding:2px 6px; font-size:0.7rem; background:#fee2e2; color:#991b1b; border:1px solid #991b1b; border-radius:4px; cursor:pointer;" title="Expand Corrective Action">Corrective Action! 🔻</button>`;
+        } else {
+            caBtnHtml = `<button class="ca-btn no-print" onclick="toggleSublist('${subId}')" style="margin-left:5px; padding:2px 6px; font-size:0.7rem; background:#e2e8f0; color:#334155; border:1px solid #cbd5e1; border-radius:4px; cursor:pointer;" title="Expand Sublist">Expand ⬇️</button>`;
+        }
+    }
+
+    let html = `<div class="entry-header"><span class="entry-title">${prompt}</span><div class="entry-right" style="display:flex; align-items:center;">${valDisplay ? `<span class="entry-value">${valDisplay}</span>` : ''}${photoBtnHtml}${subDurationStr}${subIntegrityHtml}${caBtnHtml}<span class="status-badge ${statusClass}" style="margin-left:10px;">${statusText}</span></div></div>`;
+
+    if (itemResult.notes && itemResult.notes.length > 0) { 
+        itemResult.notes.forEach(note => { if (note.body) html += `<div class="entry-notes">📝 ${note.body}</div>`; }); 
+    }
+    div.innerHTML = html;
+
+    if (hasSublist) {
+        const subContainer = document.createElement('div'); 
+        subContainer.className = 'sublist-container';
+        subContainer.id = `sub-${itemResult.id}`;
+        subContainer.style.display = 'none';
+        const subTitle = prompt; 
+        subContainer.innerHTML = `<div class="sublist-header"><span>${subTitle}</span></div>`;
         itemResult.subList.itemResults.forEach(subItem => { 
             const subEl = createItemElement(subItem, isParentTargetList, hideNA); 
             if (subEl) subContainer.appendChild(subEl); 
@@ -1932,7 +2024,15 @@ function exportListDetails(listId) {
     
     const scan = (nodes) => {
         nodes.forEach(i => {
-            const prompt = (i.itemTemplate && i.itemTemplate.text) ? i.itemTemplate.text : (i.instanceTitle || "Item");
+            let prompt = (i.itemTemplate && i.itemTemplate.text) ? i.itemTemplate.text : (i.instanceTitle || "Item");
+            
+            // Clean Prompt (Remove Markdown and Constraints)
+            prompt = prompt.replace(/[#*]/g, ''); 
+            prompt = prompt.split('Min:')[0];
+            prompt = prompt.split('Max:')[0];
+            prompt = prompt.split('Range:')[0];
+            prompt = prompt.trim();
+
             let val = "";
             if (i.isMarkedNA) val = "N/A";
             else if (i.resultValue) val = i.resultValue;
@@ -1941,7 +2041,7 @@ function exportListDetails(listId) {
             let status = (i.completionTimestamp > 0) ? "Done" : "Pending";
             let notes = "";
             if(i.notes) notes = i.notes.map(n => n.body).join(" | ");
-            
+
             csv += `"${prompt.replace(/"/g, '""')}","${val}","${status}","${notes.replace(/"/g, '""')}"\n`;
             if(i.subList && i.subList.itemResults) scan(i.subList.itemResults);
         });
@@ -1949,6 +2049,22 @@ function exportListDetails(listId) {
     scan(items);
     downloadCSV(csv, `jolt_details_${listId}.csv`);
 }
+
+function toggleSublist(id) {
+    const el = document.getElementById(id);
+    if(el) {
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+function expandAllSublists() {
+    document.querySelectorAll('.sublist-container').forEach(el => el.style.display = 'block');
+}
+
+function collapseAllSublists() {
+    document.querySelectorAll('.sublist-container').forEach(el => el.style.display = 'none');
+}
+
 function showPhoto(name, id, url) { 
     const modal = document.getElementById('photoModal'); const cap = document.getElementById('photoCaption'); const title = document.getElementById('photoTitle'); const placeholder = document.querySelector('.photo-placeholder');
     placeholder.style.display = 'flex'; placeholder.innerHTML = '<span>Image Preview Unavailable via API</span>';
@@ -1985,19 +2101,34 @@ async function joltFetch(query, variables = {}, retries = 3) {
                 throw new Error(`Attempt ${i+1} failed: ${response.status}`);
             }
 
+            let result;
             try {
-                const result = JSON.parse(text);
-                if (result.errors) throw new Error(result.errors.map(e => e.message).join(", "));
-                return result; // Success!
+                result = JSON.parse(text);
             } catch (jsonError) {
                 // If we got HTML (the "<" error), it's a proxy timeout. Retry.
-                if (i === retries - 1) throw new Error("Proxy Timeout: Received HTML instead of data.");
+                console.error("JSON Parse Error. Response body:", text);
+                
+                let errorMsg = "Proxy Timeout: Received HTML instead of data.";
+                const titleMatch = text.match(/<title>(.*?)<\/title>/i);
+                if (titleMatch && titleMatch[1]) errorMsg += ` [${titleMatch[1]}]`;
+
+                if (i === retries - 1) throw new Error(errorMsg);
                 throw new Error("Invalid JSON received");
             }
+            
+            // Check for API Logic Errors (Valid JSON, but API rejected request)
+            if (result.errors) {
+                throw new Error(result.errors.map(e => e.message).join(", "));
+            }
+            
+            return result; // Success!
 
         } catch (err) {
             // If we have retries left, wait and loop again
-            if (i < retries - 1) {
+            // Only retry if it looks like a network/parsing error, NOT a logic error
+            const isRetryable = err.message.includes("Invalid JSON") || err.message.includes("Attempt") || err.message.includes("fetch");
+            
+            if (isRetryable && i < retries - 1) {
                 console.warn(`Fetch failed (${err.message}). Retrying in ${(i+1)*1000}ms...`);
                 await delay((i + 1) * 1000); // Wait 1s, then 2s, then 3s
             } else {
@@ -2353,6 +2484,456 @@ window.addEventListener('DOMContentLoaded', () => {
     initProbeFilters_v2();
 });
 /* --- END PROBE LOGIC (V4) --- */
+
+/* --- SENSOR GRID LOGIC (NEW) --- */
+
+function updateSensorFilters(source) {
+    const marketSel = document.getElementById('sensorMarketFilter');
+    const districtSel = document.getElementById('sensorDistrictFilter');
+    if (!marketSel || !districtSel) return;
+
+    const selectedMarket = marketSel.value.trim();
+    let availableLocs = locationsCache;
+
+    // Filter by Market
+    if (selectedMarket) {
+        availableLocs = availableLocs.filter(loc => {
+            const meta = getMetaForLoc(loc);
+            return meta && meta.market.trim() === selectedMarket;
+        });
+    }
+
+    // Update District Dropdown
+    if (source === 'market' || source === 'init') {
+        const uniqueDistricts = new Set();
+        availableLocs.forEach(loc => {
+            const meta = getMetaForLoc(loc);
+            if (meta && meta.district) uniqueDistricts.add(meta.district.trim());
+        });
+        
+        const oldDist = districtSel.value;
+        districtSel.innerHTML = '<option value="">All Districts</option>';
+        Array.from(uniqueDistricts).sort().forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d; opt.textContent = d; districtSel.appendChild(opt);
+        });
+        if (source === 'init' && oldDist && uniqueDistricts.has(oldDist)) districtSel.value = oldDist;
+        else districtSel.value = "";
+    }
+}
+
+async function loadSensorsGrid() {
+    const selMarket = document.getElementById('sensorMarketFilter').value.trim();
+    const selDistrict = document.getElementById('sensorDistrictFilter').value.trim();
+    const searchTerm = document.getElementById('sensorSearch') ? document.getElementById('sensorSearch').value.trim().toLowerCase() : "";
+    const container = document.getElementById('sensorGridContainer');
+    const overlay = document.getElementById('loadingOverlay');
+    const loadText = document.getElementById('loadingText');
+
+    overlay.style.display = 'flex';
+    loadText.innerText = "Loading Sensors...";
+    container.innerHTML = '';
+
+    // Filter Locations
+    let targets = locationsCache;
+    if (searchTerm || (storeMetadataCache.length > 0 && (selMarket || selDistrict))) {
+        targets = locationsCache.filter(loc => {
+            const meta = getMetaForLoc(loc);
+            if(searchTerm && !loc.name.toLowerCase().includes(searchTerm)) return false;
+            if(!meta && (selMarket || selDistrict)) return false; // Only require meta if filtering by market/district
+            if(selMarket && meta.market.trim() !== selMarket) return false;
+            if(selDistrict && meta.district.trim() !== selDistrict) return false;
+            return true;
+        });
+    }
+
+    if(targets.length === 0) {
+        container.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:20px;">No locations found.</div>';
+        overlay.style.display = 'none';
+        return;
+    }
+
+    // Chunking for performance
+    const chunkSize = 3; // Slightly increased for better speed, still safe
+    for (let i = 0; i < targets.length; i += chunkSize) {
+        const chunk = targets.slice(i, i + chunkSize);
+        loadText.innerText = `Loading Sensors ${i + 1} - ${Math.min(i + chunkSize, targets.length)} of ${targets.length}`;
+
+        await Promise.all(chunk.map(async (loc) => {
+            try {
+                const sensors = await fetchSensorsForLocation(loc.id);
+                renderSensorCard(container, loc, sensors);
+            } catch(e) {
+                console.error(`Error loading sensors for ${loc.name}`, e);
+            }
+        }));
+        await delay(200);
+    }
+    overlay.style.display = 'none';
+}
+
+async function fetchSensorsForLocation(locationId) {
+    const query = `query GetSensorDevices($mode: ModeInput!, $eventFilter: ScenarioEventsFilter) {
+        sensorDevices(mode: $mode, filter: { isActive: true }) {
+            id
+            name
+            batteryLevel
+            signalStrength
+            lastReadTime
+            readings {
+                type
+                value
+            }
+            scenarioEvents(filter: $eventFilter) {
+                alertType
+            }
+        }
+    }`;
+    try {
+        const variables = { mode: { mode: "LOCATION", id: locationId }, eventFilter: { isCurrent: true } };
+        const data = await joltFetch(query, variables);
+        const devices = data.data?.sensorDevices || [];
+        
+        return devices.map(d => {
+            // Map Readings
+            let tempC = null;
+            let rssiVal = null;
+            let lastTs = d.lastReadTime;
+
+            if (d.readings) {
+                const tRead = d.readings.find(r => r.type === 'TEMPERATURE');
+                if (tRead) {
+                    tempC = tRead.value;
+                }
+                
+                const rRead = d.readings.find(r => r.type === 'RSSI');
+                if (rRead) rssiVal = rRead.value;
+            }
+
+            // Convert Temp C to F
+            let tempF = null;
+            if (tempC !== null) {
+                tempF = (tempC * 9/5) + 32;
+            }
+
+            // Map Battery String to Float (for existing UI logic)
+            let battFloat = 0.0;
+            const b = (d.batteryLevel || "").toUpperCase();
+            if (b === 'HIGH') battFloat = 1.0;
+            else if (b === 'MEDIUM') battFloat = 0.5;
+            else if (b === 'LOW') battFloat = 0.15;
+            else if (b === 'CRITICAL') battFloat = 0.0;
+            
+            // Map Signal to Connected status
+            // Check signal strength AND active DISCONNECT/MISSING_REPORT alerts
+            const hasDisconnectAlert = d.scenarioEvents && d.scenarioEvents.some(e => e.alertType === 'DISCONNECT' || e.alertType === 'MISSING_REPORT');
+            const hasSignal = (d.signalStrength && d.signalStrength !== 'NONE' && d.signalStrength !== 'NO_SIGNAL');
+            const isConn = hasSignal && !hasDisconnectAlert;
+
+            // Map Alerts
+            const mappedAlerts = (d.scenarioEvents || []).map(e => ({ type: e.alertType }));
+
+            return {
+                id: d.id,
+                name: d.name,
+                isConnected: isConn,
+                batteryLevel: battFloat,
+                rssi: rssiVal,
+                signalStrength: d.signalStrength, // Pass raw string for UI logic
+                latestTemperature: { fahrenheit: tempF },
+                
+                activeAlerts: mappedAlerts,
+                lastReadingTimestamp: lastTs
+            };
+        });
+    } catch(e) {
+        console.warn("Sensor fetch failed", e);
+        return [];
+    }
+}
+
+function renderSensorCard(container, loc, sensors) {
+    const total = sensors.length;
+    if (total === 0) return; // Don't show empty cards? Or show with 0? Let's skip empty to keep grid clean.
+
+    let online = 0;
+    let disconnectCount = 0;
+    let batteryIssueCount = 0; // Any battery issue (low or replace)
+    let batteryReplaceCount = 0; // Critical/Replace
+    let anySignalIssue = false; // Any signal not "Good" or "Excellent"
+    let tempCriticalCount = 0;
+    let tempWarningCount = 0;
+
+    sensors.forEach(s => {
+        // Check Alerts
+        if (s.activeAlerts) {
+            if (s.activeAlerts.some(a => a.type === 'CRITICAL' || a.type === 'ALERT')) tempCriticalCount++;
+            if (s.activeAlerts.some(a => a.type === 'WARNING')) tempWarningCount++;
+        }
+
+        if (s.isConnected) {
+            online++;
+            // Battery Logic: "REPLACE if alert or low". 
+            // Assuming batteryLevel is 0.0 - 1.0. Low < 0.2 (20%)
+            const isLow = (s.batteryLevel !== null && s.batteryLevel < 0.2);
+            const hasAlert = s.activeAlerts && s.activeAlerts.some(a => a.type === 'BATTERY');
+            const isMed = (s.batteryLevel !== null && s.batteryLevel < 0.6 && s.batteryLevel >= 0.2);
+            
+            if (isLow || hasAlert) {
+                batteryIssueCount++;
+                batteryReplaceCount++;
+            } else if (isMed) {
+                batteryIssueCount++;
+            }
+
+            // Signal Logic for Overview
+            const sig = (s.signalStrength || "").toUpperCase();
+            if (sig !== 'EXCELLENT' && sig !== 'GOOD') {
+                anySignalIssue = true;
+            }
+
+        } else {
+            disconnectCount++;
+            anySignalIssue = true; // Disconnected counts as signal issue
+            // "If a sensor has both battery and disconnect, it will only display as disconnect."
+            // So we do NOT increment batteryAlertCount here.
+        }
+    });
+
+    const card = document.createElement('div');
+    card.className = 'sensor-card';
+    // Attach Data Attributes for Filtering
+    card.dataset.crit = tempCriticalCount;
+    card.dataset.warn = tempWarningCount;
+    card.dataset.batt = batteryIssueCount;
+    card.dataset.sig = disconnectCount;
+    
+    card.onclick = () => openSensorDetailModal(loc.name, sensors);
+
+    // --- SORTING LOGIC (CSS Order) ---
+    // Disconnects on top (-20), then Battery Critical (-10), then Battery Warn (-5), then Default (0)
+    if (disconnectCount > 0) card.style.order = "-20";
+    else if (batteryReplaceCount > 0) card.style.order = "-10";
+    else if (batteryIssueCount > 0) card.style.order = "-5";
+    else card.style.order = "0";
+
+    // --- BATTERY ICON ---
+    // Green if all good. Yellow if in-between. Red if any replace.
+    let battIcon = "";
+    // Simple SVG Battery
+    const svgBatt = (color) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2" ry="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line><line x1="6" y1="10" x2="6" y2="14" stroke="${color}" stroke-width="2"></line></svg>`;
+    const svgBattFull = (color) => `<svg width="24" height="24" viewBox="0 0 24 24" fill="${color}" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="16" height="10" rx="2" ry="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line></svg>`;
+
+    if (batteryReplaceCount > 0) battIcon = `<span style="color:#dc2626; font-weight:bold; font-size:0.7rem;">Replace Battery</span>`;
+    else if (batteryIssueCount > 0) battIcon = svgBattFull('#d97706'); // Yellow
+    else battIcon = svgBattFull('#166534'); // Green
+
+    // --- SIGNAL ICON ---
+    // Green 3 bars if all good+. Red 1 bar if disconnected. Yellow 2 bars in between.
+    let sigIcon = "";
+    const svgSig = (color, bars) => {
+        let paths = "";
+        if(bars >= 1) paths += `<path d="M5 18v-4"></path>`; // Small
+        if(bars >= 2) paths += `<path d="M12 18V10"></path>`; // Med
+        if(bars >= 3) paths += `<path d="M19 18V4"></path>`; // Tall
+        return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+    };
+
+    if (disconnectCount > 0) sigIcon = `<span style="color:#dc2626; font-weight:bold; font-size:0.7rem;">No Signal</span>`;
+    else if (anySignalIssue) sigIcon = svgSig('#d97706', 2); // Yellow 2 bars
+    else sigIcon = svgSig('#166534', 3); // Green 3 bars
+
+    // --- MAIN STAT COLOR ---
+    // Red ONLY if disconnected
+    const mainStatColor = (disconnectCount > 0) ? '#dc2626' : '#334155';
+
+    // --- ALERT ICONS ---
+    let alertIcons = "";
+    // Priority: Critical > Warning (Only show one)
+    if (tempCriticalCount > 0) alertIcons = `<span style="font-size:1.2rem; margin-right:5px;" title="Critical Temp Alert">❗</span>`;
+    else if (tempWarningCount > 0) alertIcons = `<span style="font-size:1.2rem;" title="Temp Warning">⚠️</span>`;
+
+    // Battery Click Logic
+    let battClass = "";
+    if (batteryIssueCount > 0) battClass = "battery-badge";
+
+    card.innerHTML = `
+        <div class="sc-header">${loc.name}</div>
+        <div class="sc-body">
+            <div class="sc-stat-main" style="color:${mainStatColor};">
+                <strong>${online}</strong> / ${total} Online
+            </div>
+        </div>
+        <div class="sc-footer" style="justify-content: space-between; align-items: center;">
+            <div style="display:flex; align-items:center;">${alertIcons}</div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <div title="Battery Status" class="${battClass}" style="${battClass ? 'cursor:pointer;' : ''}">${battIcon}</div>
+                <div title="Signal Status" class="disconnect-badge" style="cursor:pointer;">${sigIcon}</div>
+            </div>
+        </div>
+    `;
+    
+    // Add click handler for disconnect badge
+    const discBadge = card.querySelector('.disconnect-badge');
+    if (discBadge) {
+        discBadge.onclick = (e) => {
+            e.stopPropagation();
+            openSensorDetailModal(loc.name, sensors, 'disconnected');
+        };
+    }
+
+    // Add click handler for battery badge
+    const battBadgeEl = card.querySelector('.battery-badge');
+    if (battBadgeEl) {
+        battBadgeEl.onclick = (e) => {
+            e.stopPropagation();
+            openSensorDetailModal(loc.name, sensors, 'battery');
+        };
+    }
+
+    container.appendChild(card);
+}
+
+function openSensorDetailModal(locName, sensors, filterMode = null) {
+    const modal = document.getElementById('sensorDetailModal');
+    const title = document.getElementById('sensorModalTitle');
+    const content = document.getElementById('sensorModalContent');
+    
+    title.innerText = locName;
+    
+    let html = `
+    <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse: collapse; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <thead>
+                <tr style="border-bottom: 2px solid #e2e8f0; background: #f8fafc;">
+                    <th style="padding: 12px 16px; text-align: left; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Sensor</th>
+                    <th style="padding: 12px 16px; text-align: right; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Temp</th>
+                    <th style="padding: 12px 16px; text-align: center; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Batt</th>
+                    <th style="padding: 12px 16px; text-align: center; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Sig</th>
+                    <th style="padding: 12px 16px; text-align: right; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">Updated</th>
+                </tr>
+            </thead>
+            <tbody>`;
+            
+    let displaySensors = [...sensors];
+    if (filterMode === 'disconnected') {
+        displaySensors = displaySensors.filter(s => !s.isConnected);
+        title.innerText = `${locName} (Disconnected)`;
+    } else if (filterMode === 'battery') {
+        displaySensors = displaySensors.filter(s => {
+             const isLow = (s.batteryLevel !== null && s.batteryLevel < 0.2);
+             const hasAlert = s.activeAlerts && s.activeAlerts.some(a => a.type === 'BATTERY');
+             const isMed = (s.batteryLevel !== null && s.batteryLevel < 0.6 && s.batteryLevel >= 0.2);
+             return isLow || hasAlert || isMed;
+        });
+        title.innerText = `${locName} (Battery Issues)`;
+    } else {
+        title.innerText = locName;
+    }
+    
+    displaySensors.sort((a,b) => a.name.localeCompare(b.name));
+
+    displaySensors.forEach(s => {
+        let tempDisplay = "--";
+        let signalDisplay = "DISCONNECTED";
+        let battDisplay = "--";
+        let timeDisplay = "--";
+
+        // Clean Name: Remove "12345 - " prefix
+        const cleanName = s.name.replace(/^[0-9]+\s*-\s*/, '');
+
+        // Battery Logic
+        // REPLACE (Red) if alert or low (<20%)
+        // Yellow if Medium (20-60%)
+        // Green if High (>60%)
+        const battLvl = s.batteryLevel !== null ? s.batteryLevel * 100 : 0;
+        const hasBattAlert = s.activeAlerts && s.activeAlerts.some(a => a.type === 'BATTERY');
+        
+        if (hasBattAlert || battLvl < 20) battDisplay = `<span title="Replace Battery" style="font-size:1.1rem;">🔴</span>`;
+        else if (battLvl < 60) battDisplay = `<span title="Medium Battery" style="font-size:1.1rem;">🟡</span>`;
+        else battDisplay = `<span title="Good Battery" style="font-size:1.1rem;">🟢</span>`;
+
+        // Temp (Show last known even if disconnected)
+        // Color Logic: Yellow if Warning, Red if Critical
+        if (s.latestTemperature && s.latestTemperature.fahrenheit !== null) {
+            const tempVal = s.latestTemperature.fahrenheit.toFixed(1);
+            let tempColor = "#0f172a"; // Default Dark
+            
+            // Check Alerts
+            const isCrit = s.activeAlerts && s.activeAlerts.some(a => a.type === 'CRITICAL' || a.type === 'ALERT');
+            const isWarn = s.activeAlerts && s.activeAlerts.some(a => a.type === 'WARNING');
+
+            if (isCrit) tempColor = "#dc2626"; // Red
+            else if (isWarn) tempColor = "#d97706"; // Yellow/Orange
+
+            tempDisplay = `<span style="font-size:1rem; font-weight:700; color:${tempColor};">${tempVal}°</span>`;
+        }
+
+        if (s.isConnected) {
+            // Signal Logic (Using API String)
+            const sig = (s.signalStrength || "").toUpperCase();
+            if (sig === 'EXCELLENT' || sig === 'GOOD') signalDisplay = `<span title="${sig}" style="color:#166534; font-size:1rem; letter-spacing:-2px;">▮▮▮</span>`;
+            else if (sig === 'FAIR' || sig === 'OKAY') signalDisplay = `<span title="${sig}" style="color:#d97706; font-size:1rem; letter-spacing:-2px;">▮▮▯</span>`;
+            else signalDisplay = `<span title="${sig}" style="color:#dc2626; font-size:1rem; letter-spacing:-2px;">▮▯▯</span>`;
+
+        } else {
+            // Disconnected Logic
+            signalDisplay = `<span style="background:#fee2e2; color:#991b1b; padding:2px 6px; border-radius:4px; font-size:0.7rem; font-weight:bold; white-space:nowrap;">DISCONNECTED</span>`;
+            // Keep battery display as is (last known) or maybe dim it? 
+            // Prompt says "If disconnected... temp --". Doesn't explicitly say hide battery.
+        }
+
+        if (s.lastReadingTimestamp) {
+            const dateStr = formatDateMMDDYYYY(s.lastReadingTimestamp);
+            const timeStr = formatTime(s.lastReadingTimestamp);
+            
+            // Check for staleness
+            const ts = s.lastReadingTimestamp > 946684800000 ? s.lastReadingTimestamp : s.lastReadingTimestamp * 1000;
+            const diffHours = (Date.now() - ts) / (1000 * 60 * 60);
+            
+            let timeColor = "#64748b";
+            if (diffHours > 24) timeColor = "#dc2626";
+            else if (diffHours > 2) timeColor = "#d97706";
+
+            timeDisplay = `<div style="line-height:1.2; color:${timeColor}; font-size:0.75rem;">${dateStr}<br>${timeStr}</div>`;
+        }
+
+        html += `<tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 10px 16px; color: #334155; font-weight: 500; font-size: 0.9rem;">${cleanName}</td>
+            <td style="padding: 10px 16px; text-align: right;">${tempDisplay}</td>
+            <td style="padding: 10px 16px; text-align: center;">${battDisplay}</td>
+            <td style="padding: 10px 16px; text-align: center;">${signalDisplay}</td>
+            <td style="padding: 10px 16px; text-align: right;">${timeDisplay}</td>
+        </tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    content.innerHTML = html;
+    modal.style.display = 'flex';
+}
+
+function filterSensorCards() {
+    const term = document.getElementById('sensorSearch').value.toLowerCase();
+    const statusFilter = document.getElementById('sensorStatusFilter');
+    const filterVal = statusFilter ? statusFilter.value : 'all';
+
+    const cards = document.querySelectorAll('.sensor-card');
+    cards.forEach(card => {
+        const name = card.querySelector('.sc-header').innerText.toLowerCase();
+        const matchesSearch = name.includes(term);
+        
+        let matchesFilter = true;
+        if (filterVal !== 'all') {
+            if (filterVal === 'crit') matchesFilter = parseInt(card.dataset.crit) > 0;
+            else if (filterVal === 'warn') matchesFilter = parseInt(card.dataset.warn) > 0;
+            else if (filterVal === 'batt') matchesFilter = parseInt(card.dataset.batt) > 0;
+            else if (filterVal === 'sig') matchesFilter = parseInt(card.dataset.sig) > 0;
+        }
+
+        card.style.display = (matchesSearch && matchesFilter) ? 'flex' : 'none';
+    });
+}
+
 // --- SAFETY GRID FILTER LOGIC (Cascading) ---
 // --- SAFETY GRID FILTER LOGIC (Robust) ---
 function updateSafetyFilters(source) {
