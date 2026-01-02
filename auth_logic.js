@@ -55,6 +55,21 @@ async function handleLogin() {
     }
 }
 
+// 3b. FORGOT PASSWORD HANDLER
+async function handleForgotPassword() {
+    const email = document.getElementById('txtEmail').value;
+    if (!email) { alert("Please enter your email address first."); return; }
+    
+    if(!confirm(`Send password reset email to ${email}?`)) return;
+
+    try {
+        await auth.sendPasswordResetEmail(email);
+        alert("Reset email sent! Please check your inbox.");
+    } catch (e) {
+        alert("Error: " + e.message);
+    }
+}
+
 // 4. SHARED STARTUP LOGIC
 // A. LOAD USER PROFILE & START APP
 async function loadProfileAndStart(email) {

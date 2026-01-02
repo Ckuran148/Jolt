@@ -157,7 +157,7 @@ body {
     font-size: 0.9rem;
     min-width: 150px;
 }
-.button-group { display: flex; gap: 10px; margin-left: auto; }
+.button-group { display: flex; gap: 10px; margin-left: left; }
 
 /* Buttons */
 .btn-primary {
@@ -827,3 +827,63 @@ body {
 .checkbox-item:hover {
     background-color: #f1f5f9;
 }
+
+/* --- SENSOR GRID STYLES --- */
+.sensor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+    grid-auto-rows: max-content; /* Prevent vertical stretching */
+    padding: 15px;
+    overflow-y: auto; /* Enable internal scrolling */
+    flex: 1; /* Take remaining height in the card */
+}
+.sensor-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 15px;
+    height: 130px; /* Fixed height for uniformity */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.sensor-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    border-color: #cbd5e1;
+}
+.sc-header {
+    font-weight: bold;
+    font-size: 0.95rem;
+    color: #1e293b;
+    margin-bottom: 5px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 5px;
+}
+.sc-stat-main {
+    font-size: 1.1rem;
+    color: #334155;
+    margin-bottom: 5px;
+    text-align: center;
+}
+.sc-footer {
+    display: flex;
+    justify-content: space-around;
+    background: #f8fafc;
+    padding: 8px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    margin-top: auto;
+}
+.sc-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+.sc-badge.alert { color: #dc2626; font-weight: bold; }
+.sc-badge.warn { color: #d97706; font-weight: bold; }
+.sc-badge.ok { color: #166534; }

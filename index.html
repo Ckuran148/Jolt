@@ -10,7 +10,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
-
+ 
 <div class="dashboard-container">
     
     <!-- LEFT SIDEBAR (Desktop) / BOTTOM NAV (Mobile) -->
@@ -42,6 +42,9 @@
                 </button>
                 <button id="nav-probeGrid" class="nav-btn" onclick="switchTab('probeGrid')">
                     <span class="icon">🌡️</span> <span class="label">Probe & Sensor</span>
+                </button>
+                <button id="nav-sensors" class="nav-btn" onclick="switchTab('sensors')">
+                    <span class="icon">📡</span> <span class="label">Sensors</span>
                 </button>
             </div>
 
@@ -166,6 +169,11 @@
     <div class="card">
         <div class="card-header">
             <h2>DFSL Grid</h2>
+            <div class="legend-box hide-mobile" style="margin-right: auto; margin-left: 20px;">
+                <span class="legend-item">⏱️ Duration</span>
+                <span class="legend-item">🛡️ Integrity</span>
+                <span class="legend-item">⚠️ Corrective Action</span>
+            </div>
         </div>
         <div class="controls-bar">
             <details open class="filter-toggle">
@@ -437,6 +445,57 @@
         </div>
     </div>
 </div>
+
+<!-- VIEW 6: SENSORS (NEW) -->
+<div id="tab-sensors" class="view-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>Sensor Status</h2>
+            <div class="legend-box hide-mobile" style="margin-right: auto; margin-left: 20px;">
+                <span class="legend-item">❗ Critical Temp</span>
+                <span class="legend-item">⚠️ Temp Warning</span>
+            </div>
+            <button class="btn-primary" onclick="loadSensorsGrid()">Refresh</button>
+        </div>
+        <div class="controls-bar">
+             <div class="filter-content">
+                <div class="control-group">
+                    <label>Search</label>
+                    <input type="text" id="sensorSearch" placeholder="Search Site..." onkeyup="filterSensorCards()" style="width: 140px;">
+                </div>
+                <div class="control-group">
+                    <label>Status</label>
+                    <select id="sensorStatusFilter" onchange="filterSensorCards()">
+                        <option value="all">Show All</option>
+                        <option value="crit">Critical Alerts</option>
+                        <option value="warn">Warnings</option>
+                        <option value="batt">Battery Issues</option>
+                        <option value="sig">Signal/Disconnect</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Market</label>
+                    <select id="sensorMarketFilter" onchange="updateSensorFilters('market')">
+                        <option value="">All Markets</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>District</label>
+                    <select id="sensorDistrictFilter" onchange="updateSensorFilters('district')">
+                        <option value="">All Districts</option>
+                    </select>
+                </div>
+                <div class="button-group">
+                    <button class="btn-primary" onclick="loadSensorsGrid()">Load Sensors</button>
+                </div>
+             </div>
+        </div>
+        <div id="sensorGridContainer" class="sensor-grid">
+            <div style="grid-column: 1/-1; text-align:center; padding:40px; color:#666;">Select filters and click Load Sensors</div>
+        </div>
+    </div>
+</div>
+
 <div id="tab-admin" class="view-content">
     <div class="card">
         <div class="card-header">
@@ -470,6 +529,18 @@
 
 <!-- MODALS -->
 <div id="photoModal"><div class="photo-content"><button class="close-photo" onclick="closePhoto()">Close</button><h3 id="photoTitle">Photo Details</h3><div class="photo-placeholder"><span>Image Preview Unavailable via API</span></div><p id="photoCaption" style="font-family:monospace; color:#333; word-break:break-all;"></p></div></div>
+
+<!-- SENSOR DETAIL MODAL -->
+<div id="sensorDetailModal" class="modal" style="display:none; position:fixed; z-index:9000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">
+    <div class="modal-content" style="background:white; padding:20px; border-radius:12px; width:550px; max-width:95%; max-height:85vh; overflow-y:auto; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #eee; padding-bottom:10px;">
+            <h3 id="sensorModalTitle" style="margin:0;">Site Sensors</h3>
+            <button onclick="document.getElementById('sensorDetailModal').style.display='none'" class="btn-secondary" style="padding:4px 10px;">Close</button>
+        </div>
+        <div id="sensorModalContent">Loading...</div>
+    </div>
+</div>
+
 <div id="loadingOverlay"><div class="loader"></div><h2 id="loadingText">Processing...</h2><p id="loadingSubtext">Please wait.</p></div>
 <div id="system-log" style="display:none;"></div>
 <div id="configModal"><div class="modal-content"><h3>API Connection Settings</h3><p style="font-size: 0.8rem; color: #666;">Adjust these only if connection fails.</p><div class="modal-row"><label>Proxy URL (Worker)</label><input type="text" id="cfg-url" value="https://jolt-proxy.ckuran.workers.dev"></div><div class="modal-row" style="opacity: 0.5;"><label>Auth Token (Managed by Worker)</label><input type="text" id="cfg-token-val" placeholder="(Hidden)" disabled></div><div style="text-align: right; margin-top: 15px;"><button onclick="saveConfig()" class="btn-primary">Save & Reload</button><button onclick="document.getElementById('configModal').style.display='none'" style="padding: 9px;">Cancel</button></div></div></div>
@@ -482,6 +553,7 @@
         <input type="password" id="txtPassword" placeholder="Password" style="width:100%; padding:10px; margin-bottom:20px; border:1px solid #ccc; border-radius:6px;">
         
         <button onclick="handleLogin()" class="btn-primary" style="width:100%;">Sign In</button>
+        <a href="#" onclick="handleForgotPassword()" style="color:#94a3b8; font-size:0.8rem; margin-top:15px; display:inline-block; text-decoration:none;">Forgot Password?</a>
         <p id="loginError" style="color:red; margin-top:15px; font-size:0.9rem;"></p>
     </div>
 </div>
