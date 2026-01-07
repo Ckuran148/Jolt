@@ -329,6 +329,19 @@ window.addEventListener('DOMContentLoaded', () => {
     const todayStr = `${yyyy}-${mm}-${dd}`;   // For Date Inputs (YYYY-MM-DD)
     const monthStr = `${yyyy}-${mm}`;         // For Month Inputs (YYYY-MM)
     
+    // Set default date range for Positional Cleaning (Last 7 Days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(today.getDate() - 7);
+    const y7 = sevenDaysAgo.getFullYear();
+    const m7 = String(sevenDaysAgo.getMonth() + 1).padStart(2, '0');
+    const d7 = String(sevenDaysAgo.getDate()).padStart(2, '0');
+    const sevenDaysAgoStr = `${y7}-${m7}-${d7}`;
+
+    const posStart = document.getElementById('posStartDate');
+    const posEnd = document.getElementById('posEndDate');
+    if (posStart) posStart.value = sevenDaysAgoStr;
+    if (posEnd) posEnd.value = todayStr;
+
     // Set default dates for daily inputs
     // 'gridDate' is the DFSL Filter Date
     const els = ['startDate', 'endDate', 'gridDate', 'reportDate'];
@@ -559,13 +572,15 @@ function populateGridFilters() {
         document.getElementById('gridMarketFilter'),  // DFSL Grid (New)
         document.getElementById('safetyMarketFilter'), // Safety
         document.getElementById('probeMarketFilter_v2'), // Probe
-        document.getElementById('sensorMarketFilter') // Sensors
+        document.getElementById('sensorMarketFilter'), // Sensors
+        document.getElementById('posMarketFilter')     // Positional
     ];
     const districtSelects = [
         document.getElementById('districtFilter'), 
         document.getElementById('safetyDistrictFilter'),
         document.getElementById('probeDistrictFilter_v2'),
-        document.getElementById('sensorDistrictFilter')
+        document.getElementById('sensorDistrictFilter'),
+        document.getElementById('posDistrictFilter')
     ];
 
     let availableMarkets = new Set();
@@ -624,6 +639,7 @@ function populateGridFilters() {
     if (typeof updateGridFilters === 'function') updateGridFilters('init'); // <-- ADD THIS
     if (typeof updateSafetyFilters === 'function') updateSafetyFilters('init');
     if (typeof updateSensorFilters === 'function') updateSensorFilters('init');
+    if (typeof updatePosGridHierarchy === 'function') updatePosGridHierarchy('init');
 }
 // 6. Initialize Safety Grid Hierarchy
     if (typeof updateSafetyFilters === 'function') {
@@ -953,6 +969,14 @@ async function loadStoreGrid() {
     const selMarket = document.getElementById('gridMarketFilter').value.trim();
     const selDistrict = document.getElementById('gridDistrictFilter').value.trim();
     const selLocationId = document.getElementById('gridLocationFilter').value;
+    const isGrouped = document.getElementById('gridGroupToggle').checked;
+    
+    const collapseBtn = document.getElementById('gridCollapseBtn');
+    if(collapseBtn) {
+        collapseBtn.style.display = isGrouped ? 'inline-block' : 'none';
+        collapseBtn.innerText = "Collapse All";
+        collapseBtn.dataset.state = "expanded";
+    }
 
     if (!dateStr) { alert("Please select date."); return; }
     const overlay = document.getElementById('loadingOverlay');
@@ -992,13 +1016,43 @@ async function loadStoreGrid() {
         return;
     }
 
-    // Process concurrently in chunks to speed up loading
-const chunkSize = 3; 
-    for (let i = 0; i < filteredLocations.length; i += chunkSize) {
-        const chunk = filteredLocations.slice(i, i + chunkSize);
-        loadText.innerText = `Processing stores ${i + 1} - ${Math.min(i + chunkSize, filteredLocations.length)} of ${filteredLocations.length}`;
+    // --- PREPARE DATA FOR GROUPING ---
+    let processedTargets = filteredLocations.map(loc => {
+        const meta = getMetaForLoc(loc);
+        return {
+            ...loc,
+            marketName: meta ? meta.market : 'Unassigned',
+            districtName: meta ? meta.district : 'Unassigned'
+        };
+    });
 
-        await Promise.all(chunk.map(async (loc) => {
+    // --- SORTING ---
+    if (isGrouped) {
+        processedTargets.sort((a, b) => {
+            if (a.marketName !== b.marketName) return a.marketName.localeCompare(b.marketName);
+            if (a.districtName !== b.districtName) return a.districtName.localeCompare(b.districtName);
+            return a.name.localeCompare(b.name);
+        });
+    } else {
+        processedTargets.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    // Calculate unique markets for header display logic
+    const uniqueMarketsCount = new Set(processedTargets.map(t => t.marketName)).size;
+
+    // Process concurrently in chunks to speed up loading
+    const chunkSize = 3; 
+    
+    let lastMarket_dfsl = null;
+    let lastDistrict_dfsl = null;
+    let currentGroupId_dfsl = null;
+
+    for (let i = 0; i < processedTargets.length; i += chunkSize) {
+        const chunk = processedTargets.slice(i, i + chunkSize);
+        loadText.innerText = `Processing stores ${i + 1} - ${Math.min(i + chunkSize, processedTargets.length)} of ${processedTargets.length}`;
+
+        // 1. FETCH DATA (Parallel)
+        const chunkResults = await Promise.all(chunk.map(async (loc) => {
             try {
                 const lists = await fetchListsForLocation(loc.id, startTs, endTs);
                 
@@ -1070,16 +1124,50 @@ const chunkSize = 3;
                 else if (hasExpiring) rowData.sanitizer = "Expiring";
                 else if (hasWarning) rowData.sanitizer = "Warning";
 
-                // 4. FIX: Save the report data to the global cache so the button click works later
-                reportDataCache.push(locReport);
-                
-                gridDataCache.push(rowData);
-                renderGridRow(tbody, rowData);
-
-            } catch(e) { console.error(e); }
+                return { loc, rowData, locReport, error: null };
+            } catch(e) { 
+                return { loc, error: e };
+            }
         }));
+
+        // 2. RENDER DATA (Sequential - Preserves Sort Order)
+        for (const res of chunkResults) {
+            if (res.error) { console.error(res.error); continue; }
+
+            reportDataCache.push(res.locReport);
+            gridDataCache.push(res.rowData);
+
+            if (isGrouped) {
+                if (res.loc.marketName !== lastMarket_dfsl || res.loc.districtName !== lastDistrict_dfsl) {
+                    // Generate Group ID
+                    currentGroupId_dfsl = `group-dfsl-${res.loc.marketName}-${res.loc.districtName}`.replace(/[^a-zA-Z0-9-]/g, '_');
+                    
+                    const headerText = (uniqueMarketsCount > 1) 
+                        ? `${res.loc.marketName} <span style="color:#64748b; font-weight:normal; margin:0 5px;">/</span> ${res.loc.districtName}`
+                        : res.loc.districtName;
+
+                    const headerRow = document.createElement('tr');
+                    headerRow.className = 'group-header';
+                    headerRow.innerHTML = `<td colspan="5" style="background:#e2e8f0; font-weight:bold; color:#1e293b; padding:10px 12px; border-top:2px solid #94a3b8;">
+                        <div style="display:flex; align-items:center; cursor:pointer;" onclick="toggleSpecificGroup('${currentGroupId_dfsl}', this)">
+                            <span class="group-toggle-icon" style="margin-right:8px;">▼</span> ${headerText}
+                        </div>
+                    </td>`;
+                    tbody.appendChild(headerRow);
+                    lastMarket_dfsl = res.loc.marketName; lastDistrict_dfsl = res.loc.districtName;
+                }
+            }
+            renderGridRow(tbody, res.rowData, currentGroupId_dfsl);
+        }
+
         await delay(500);
     }
+
+    const tsEl = document.getElementById('gridLastRefreshed');
+    if(tsEl) {
+        tsEl.innerText = "Last Refreshed: " + new Date().toLocaleTimeString();
+    }
+
     overlay.style.display = 'none';
 }
 
@@ -1093,6 +1181,14 @@ async function loadSafetyGrid() {
     const rawDistrict = document.getElementById('safetyDistrictFilter').value || "";
     // This is the new ID we added in Step 1
     const rawLocationId = document.getElementById('safetyLocationFilter')?.value || "";
+    const isGrouped = document.getElementById('safetyGroupToggle').checked;
+    
+    const collapseBtn = document.getElementById('safetyCollapseBtn');
+    if(collapseBtn) {
+        collapseBtn.style.display = isGrouped ? 'inline-block' : 'none';
+        collapseBtn.innerText = "Collapse All";
+        collapseBtn.dataset.state = "expanded";
+    }
 
     const selMarket = rawMarket.trim();
     const selDistrict = rawDistrict.trim();
@@ -1143,12 +1239,41 @@ async function loadSafetyGrid() {
         return;
     }
 
+    // --- PREPARE DATA FOR GROUPING ---
+    let processedTargets = filteredLocations.map(loc => {
+        const meta = getMetaForLoc(loc);
+        return {
+            ...loc,
+            marketName: meta ? meta.market : 'Unassigned',
+            districtName: meta ? meta.district : 'Unassigned'
+        };
+    });
+
+    // --- SORTING ---
+    if (isGrouped) {
+        processedTargets.sort((a, b) => {
+            if (a.marketName !== b.marketName) return a.marketName.localeCompare(b.marketName);
+            if (a.districtName !== b.districtName) return a.districtName.localeCompare(b.districtName);
+            return a.name.localeCompare(b.name);
+        });
+    } else {
+        processedTargets.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    // Calculate unique markets
+    const uniqueMarketsCount = new Set(processedTargets.map(t => t.marketName)).size;
+
     const chunkSize = 3; 
-    for (let i = 0; i < filteredLocations.length; i += chunkSize) {
-        const chunk = filteredLocations.slice(i, i + chunkSize);
-        loadText.innerText = `Processing stores ${i + 1} - ${Math.min(i + chunkSize, filteredLocations.length)} of ${filteredLocations.length}`;
+    
+    let lastMarket_safety = null;
+    let lastDistrict_safety = null;
+    let currentGroupId_safety = null;
+
+    for (let i = 0; i < processedTargets.length; i += chunkSize) {
+        const chunk = processedTargets.slice(i, i + chunkSize);
+        loadText.innerText = `Processing stores ${i + 1} - ${Math.min(i + chunkSize, processedTargets.length)} of ${processedTargets.length}`;
         
-        await Promise.all(chunk.map(async (loc) => {
+        const chunkResults = await Promise.all(chunk.map(async (loc) => {
             try {
                 const lists = await fetchListsForLocation(loc.id, startTs, endTs);
                 
@@ -1177,22 +1302,57 @@ async function loadSafetyGrid() {
                     rowData.auditScore = max > 0 ? Math.round((auditList.score / max) * 100) + "%" : "0%";
                 }
 
-                safetyGridDataCache.push(rowData);
-                renderSafetyGridRow(tbody, rowData);
+                return { loc, rowData, error: null };
             } catch(e) { 
-                console.error("Safety Grid Error " + loc.name, e);
-                const tr = document.createElement('tr');
-                tr.innerHTML = `<td><strong>${loc.name}</strong></td><td colspan="3" style="color:red; text-align:center;">Error: ${e.message}</td>`;
-                tbody.appendChild(tr);
+                return { loc, error: e };
             }
         }));
+
+        for (const res of chunkResults) {
+            if (res.error) {
+                console.error("Safety Grid Error " + res.loc.name, res.error);
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td><strong>${res.loc.name}</strong></td><td colspan="3" style="color:red; text-align:center;">Error: ${res.error.message}</td>`;
+                tbody.appendChild(tr);
+                continue;
+            }
+
+            safetyGridDataCache.push(res.rowData);
+
+            if (isGrouped) {
+                if (res.loc.marketName !== lastMarket_safety || res.loc.districtName !== lastDistrict_safety) {
+                    currentGroupId_safety = `group-safety-${res.loc.marketName}-${res.loc.districtName}`.replace(/[^a-zA-Z0-9-]/g, '_');
+                    const headerText = (uniqueMarketsCount > 1) ? `${res.loc.marketName} <span style="color:#64748b; font-weight:normal; margin:0 5px;">/</span> ${res.loc.districtName}` : res.loc.districtName;
+                    
+                    const headerRow = document.createElement('tr');
+                    headerRow.className = 'group-header';
+                    headerRow.innerHTML = `<td colspan="4" style="background:#e2e8f0; font-weight:bold; color:#1e293b; padding:10px 12px; border-top:2px solid #94a3b8;">
+                        <div style="display:flex; align-items:center; cursor:pointer;" onclick="toggleSpecificGroup('${currentGroupId_safety}', this)">
+                            <span class="group-toggle-icon" style="margin-right:8px;">▼</span> ${headerText}
+                        </div></td>`;
+                    tbody.appendChild(headerRow);
+                    lastMarket_safety = res.loc.marketName; lastDistrict_safety = res.loc.districtName;
+                }
+            }
+            renderSafetyGridRow(tbody, res.rowData, currentGroupId_safety);
+        }
+
         await delay(500); 
     }
+
+    const tsEl = document.getElementById('safetyGridLastRefreshed');
+    if (tsEl) {
+        tsEl.innerText = "Last Refreshed: " + new Date().toLocaleTimeString();
+    }
+
     overlay.style.display = 'none';
 }
 
-function renderSafetyGridRow(tbody, data) {
+function renderSafetyGridRow(tbody, data, groupId = null) {
     const tr = document.createElement('tr');
+    if (groupId) {
+        tr.classList.add('group-item', groupId);
+    }
     
     const getBadge = (status) => {
         let cls = "ls-missing";
@@ -1213,26 +1373,6 @@ function renderSafetyGridRow(tbody, data) {
         </td>
     `;
     tbody.appendChild(tr);
-}
-
-function printSafetyGrid() {
-    const month = document.getElementById('safetyMonth').value;
-    const m = document.getElementById('safetyMarketFilter').value || "All Markets";
-    const d = document.getElementById('safetyDistrictFilter').value || "All Districts";
-    
-    let header = document.getElementById('safetyPrintHeader');
-    if (!header) {
-        header = document.createElement('div');
-        header.id = 'safetyPrintHeader';
-        header.className = 'only-print';
-        header.style.marginBottom = '20px';
-        header.style.textAlign = 'center';
-        const table = document.querySelector('#safetyTable');
-        table.parentNode.insertBefore(header, table);
-    }
-    
-    header.innerHTML = `<h2>Safety Audit Grid</h2><p>Month: ${month} | Market: ${m} | District: ${d}</p>`;
-    window.print();
 }
 
 function exportSafetyGridCSV() {
@@ -1393,7 +1533,13 @@ async function generateSingleReport() {
         });
         
         // CLOSE TABLE & CONTAINER
-        html += `</tbody></table></div>`; 
+        html += `</tbody></table>
+            <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #ccc; font-size: 0.75rem; color: #555; display: flex; gap: 20px;">
+                <strong>Legend:</strong>
+                <span><span class="icon-calc">⌨️</span> Manual Entry</span>
+                <span><span class="icon-probe">🌡️</span> Thermometer</span>
+                <span><span class="icon-sensor">📡</span> Sensor</span>
+            </div></div>`; 
 
         document.getElementById('reportContent').innerHTML = html;
 
@@ -1490,7 +1636,7 @@ function renderRowFromFlat(label, keywords, flatDP1, flatDP3, flatDP5, reportDat
         const node = getBestMatch(flatItems);
         
         if (!node) return '<td><span class="dash">-</span></td>';
-        if (node.isMarkedNA) return '<td>N/A</td>';
+        if (node.isMarkedNA) return '<td class="cell-na">N/A</td>';
 
         // --- ICON & HIGHLIGHT LOGIC ---
         let icon = '<span class="icon-calc" title="Manual">⌨️</span>';
@@ -1512,6 +1658,11 @@ function renderRowFromFlat(label, keywords, flatDP1, flatDP3, flatDP5, reportDat
         let styleClass = "";
 
         if (typeof val === 'number' && val % 1 !== 0) val = val.toFixed(1);
+
+        // Sanitizer Strength Display (1.0 = Yes -> "Within Range")
+        if (label.includes("Sanitizer Strength") && val == 1) {
+            val = "Within Range";
+        }
 
         // Date Logic (Takes Priority over Manual Highlight)
         if (isDateCheck && node.resultDouble > 0) {
@@ -1697,8 +1848,11 @@ function renderReportRow(label, keywords, buckets, reportDateObj, isDateCheck = 
     </tr>`;
 }
 
-function renderGridRow(tbody, data) {
+function renderGridRow(tbody, data, groupId = null) {
     const tr = document.createElement('tr');
+    if (groupId) {
+        tr.classList.add('group-item', groupId);
+    }
     const renderCell = (cellData) => {
         let statusClass = "ls-missing";
         if (cellData.status === "Complete") statusClass = "ls-complete";
@@ -1758,7 +1912,17 @@ function printGrid() {
         table.parentNode.insertBefore(header, table);
     }
     header.innerHTML = `<h2>DFSL Grid</h2><p>Date: ${displayDate} | Market: ${m} | District: ${d}</p>`;
-    window.print();
+    
+    // Force ALL rows to show before printing
+    const table = document.querySelector('#storeTable');
+    if (table) {
+        table.querySelectorAll('.group-item').forEach(el => el.style.display = '');
+        table.querySelectorAll('.group-toggle-icon').forEach(el => el.innerText = '▼');
+    }
+
+    setTimeout(() => {
+        window.print();
+    }, 500);
 }
 
 function printSafetyGrid() {
@@ -1785,7 +1949,18 @@ function printSafetyGrid() {
     }
     
     header.innerHTML = `<h2>Safety Audit Grid</h2><p>Month: ${displayMonth} | Market: ${m} | District: ${d}</p>`;
-    window.print();
+    
+    // Force ALL rows to show before printing
+    const table = document.querySelector('#safetyTable');
+    if (table) {
+        table.querySelectorAll('.group-item').forEach(el => el.style.display = '');
+        table.querySelectorAll('.group-toggle-icon').forEach(el => el.innerText = '▼');
+    }
+
+    // Small delay to allow browser to render expanded rows
+    setTimeout(() => {
+        window.print();
+    }, 500);
 }
 
 function exportGridToCSV() {
@@ -2438,6 +2613,12 @@ async function loadProbeGrid_v2() {
         // Small delay between chunks to be nice to API
         await delay(300); 
     }
+
+    const tsEl = document.getElementById('probeGridLastRefreshed');
+    if (tsEl) {
+        tsEl.innerText = "Last Refreshed: " + new Date().toLocaleTimeString();
+    }
+
     overlay.style.display = 'none';
 }
 
@@ -2476,8 +2657,8 @@ function exportProbeGridCSV_v2() {
 
 // Auto-Init Listener
 window.addEventListener('DOMContentLoaded', () => {
-    const todayStr = new Date().toISOString().split('T')[0];
-    const pStart = document.getElementById('probeStartDate_v2');
+    const todayStr = getLocalTodayStr();
+    const pStart = document.getElementById('probeStartDate_v2'); // Corrected ID
     const pEnd = document.getElementById('probeEndDate_v2');
     if(pStart) pStart.value = todayStr;
     if(pEnd) pEnd.value = todayStr;
@@ -2522,10 +2703,56 @@ function updateSensorFilters(source) {
     }
 }
 
+function toggleGroupCollapse(type) {
+    const btnId = `${type}CollapseBtn`;
+    const btn = document.getElementById(btnId);
+    if(!btn) return;
+
+    const isExpanded = btn.dataset.state === "expanded";
+    const newState = isExpanded ? "collapsed" : "expanded";
+    
+    btn.innerText = isExpanded ? "Expand All" : "Collapse All";
+    btn.dataset.state = newState;
+
+    let container;
+    if (type === 'grid') {
+        container = document.querySelector('#storeTable tbody');
+    } else if (type === 'safety') {
+        container = document.querySelector('#safetyTable tbody');
+    } else if (type === 'sensor') {
+        container = document.getElementById('sensorGridContainer');
+    }
+
+    if (!container) return;
+
+    // Toggle content visibility
+    const items = container.querySelectorAll('.group-item');
+    items.forEach(item => {
+        item.style.display = isExpanded ? 'none' : '';
+    });
+
+    // Update all header icons in this container
+    const headers = container.querySelectorAll('.group-header');
+    headers.forEach(header => {
+        const icon = header.querySelector('.group-toggle-icon');
+        if (icon) {
+            icon.innerText = isExpanded ? '▶' : '▼';
+        }
+    });
+}
+
 async function loadSensorsGrid() {
     const selMarket = document.getElementById('sensorMarketFilter').value.trim();
     const selDistrict = document.getElementById('sensorDistrictFilter').value.trim();
     const searchTerm = document.getElementById('sensorSearch') ? document.getElementById('sensorSearch').value.trim().toLowerCase() : "";
+    const isGrouped = document.getElementById('sensorGroupToggle').checked;
+    
+    const collapseBtn = document.getElementById('sensorCollapseBtn');
+    if(collapseBtn) {
+        collapseBtn.style.display = isGrouped ? 'inline-block' : 'none';
+        collapseBtn.innerText = "Collapse All";
+        collapseBtn.dataset.state = "expanded";
+    }
     const container = document.getElementById('sensorGridContainer');
     const overlay = document.getElementById('loadingOverlay');
     const loadText = document.getElementById('loadingText');
@@ -2533,6 +2760,15 @@ async function loadSensorsGrid() {
     overlay.style.display = 'flex';
     loadText.innerText = "Loading Sensors...";
     container.innerHTML = '';
+
+    // Handle Layout for Grouping
+    if (isGrouped) {
+        container.classList.remove('sensor-grid');
+        container.style.cssText = "display:flex; flex-direction:column; overflow-y:auto; flex:1; padding:15px;";
+    } else {
+        container.classList.add('sensor-grid');
+        container.style.cssText = "";
+    }
 
     // Filter Locations
     let targets = locationsCache;
@@ -2553,20 +2789,84 @@ async function loadSensorsGrid() {
         return;
     }
 
-    // Chunking for performance
-    const chunkSize = 3; // Slightly increased for better speed, still safe
-    for (let i = 0; i < targets.length; i += chunkSize) {
-        const chunk = targets.slice(i, i + chunkSize);
-        loadText.innerText = `Loading Sensors ${i + 1} - ${Math.min(i + chunkSize, targets.length)} of ${targets.length}`;
+    // --- PREPARE DATA FOR GROUPING ---
+    let processedTargets = targets.map(loc => {
+        const meta = getMetaForLoc(loc);
+        return {
+            ...loc,
+            marketName: meta ? meta.market : 'Unassigned',
+            districtName: meta ? meta.district : 'Unassigned'
+        };
+    });
 
-        await Promise.all(chunk.map(async (loc) => {
+    // --- SORTING ---
+    if (isGrouped) {
+        processedTargets.sort((a, b) => {
+            if (a.marketName !== b.marketName) return a.marketName.localeCompare(b.marketName);
+            if (a.districtName !== b.districtName) return a.districtName.localeCompare(b.districtName);
+            return a.name.localeCompare(b.name);
+        });
+    } else {
+        processedTargets.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    const uniqueMarketsCount = new Set(processedTargets.map(t => t.marketName)).size;
+
+    // Chunking for performance
+    const chunkSize = 3; 
+    
+    let lastMarket_sensor = null;
+    let lastDistrict_sensor = null;
+    let currentGroupId_sensor = null;
+    let currentGroupDiv = null;
+
+    for (let i = 0; i < processedTargets.length; i += chunkSize) {
+        const chunk = processedTargets.slice(i, i + chunkSize);
+        loadText.innerText = `Loading Sensors ${i + 1} - ${Math.min(i + chunkSize, processedTargets.length)} of ${processedTargets.length}`;
+
+        const chunkResults = await Promise.all(chunk.map(async (loc) => {
             try {
                 const sensors = await fetchSensorsForLocation(loc.id);
-                renderSensorCard(container, loc, sensors);
+                return { loc, sensors, error: null };
             } catch(e) {
-                console.error(`Error loading sensors for ${loc.name}`, e);
+                return { loc, error: e };
             }
         }));
+
+        for (const res of chunkResults) {
+            if (res.error) { console.error(res.error); continue; }
+
+            if (isGrouped) {
+                if (res.loc.marketName !== lastMarket_sensor || res.loc.districtName !== lastDistrict_sensor) {
+                    const groupId = `group-sensor-${res.loc.marketName}-${res.loc.districtName}`.replace(/[^a-zA-Z0-9-]/g, '_');
+                    const headerText = (uniqueMarketsCount > 1) ? `${res.loc.marketName} <span style="color:#64748b; font-weight:normal; margin:0 5px;">/</span> ${res.loc.districtName}` : res.loc.districtName;
+
+                    const headerDiv = document.createElement('div');
+                    headerDiv.className = 'group-header';
+                    headerDiv.style.cssText = "background:#e2e8f0; font-weight:bold; color:#1e293b; padding:10px 12px; border-top:2px solid #94a3b8; margin-top:20px; border-radius:4px; cursor:pointer; display:flex; align-items:center; flex-shrink:0;";
+                    headerDiv.innerHTML = `<span class="group-toggle-icon" style="margin-right:8px;">▼</span> ${headerText}`;
+                    headerDiv.onclick = function() { toggleSpecificGroup(groupId, this); };
+                    
+                    container.appendChild(headerDiv);
+
+                    // Create Wrapper for Group Content
+                    currentGroupDiv = document.createElement('div');
+                    currentGroupDiv.className = `sensor-grid group-item ${groupId}`;
+                    currentGroupDiv.style.cssText = "margin-top:10px; flex:none; overflow:visible; display:grid; margin-bottom:20px;";
+                    container.appendChild(currentGroupDiv);
+
+                    lastMarket_sensor = res.loc.marketName; lastDistrict_sensor = res.loc.districtName;
+                    currentGroupId_sensor = groupId; 
+                }
+                // Render into the wrapper
+                renderSensorCard(currentGroupDiv, res.loc, res.sensors, null);
+
+            } else {
+                // Not Grouped: Render directly to main container
+                renderSensorCard(container, res.loc, res.sensors, null);
+            }
+        }
+
         await delay(200);
     }
     overlay.style.display = 'none';
@@ -2589,6 +2889,7 @@ async function fetchSensorsForLocation(locationId) {
             }
         }
     }`;
+
     try {
         const variables = { mode: { mode: "LOCATION", id: locationId }, eventFilter: { isCurrent: true } };
         const data = await joltFetch(query, variables);
@@ -2652,7 +2953,7 @@ async function fetchSensorsForLocation(locationId) {
     }
 }
 
-function renderSensorCard(container, loc, sensors) {
+function renderSensorCard(container, loc, sensors, groupId = null) {
     const total = sensors.length;
     if (total === 0) return; // Don't show empty cards? Or show with 0? Let's skip empty to keep grid clean.
 
@@ -2702,6 +3003,9 @@ function renderSensorCard(container, loc, sensors) {
 
     const card = document.createElement('div');
     card.className = 'sensor-card';
+    if (groupId) {
+        card.classList.add('group-item', groupId);
+    }
     // Attach Data Attributes for Filtering
     card.dataset.crit = tempCriticalCount;
     card.dataset.warn = tempWarningCount;
@@ -2934,6 +3238,62 @@ function filterSensorCards() {
     });
 }
 
+function toggleGroupCollapse(type) {
+    const btnId = `${type}CollapseBtn`;
+    const btn = document.getElementById(btnId);
+    if(!btn) return;
+
+    const isExpanded = btn.dataset.state === "expanded";
+    const newState = isExpanded ? "collapsed" : "expanded";
+    
+    btn.innerText = isExpanded ? "Expand All" : "Collapse All";
+    btn.dataset.state = newState;
+
+    let container;
+    if (type === 'grid') {
+        container = document.querySelector('#storeTable tbody');
+    } else if (type === 'safety') {
+        container = document.querySelector('#safetyTable tbody');
+    } else if (type === 'sensor') {
+        container = document.getElementById('sensorGridContainer');
+    }
+
+    if (!container) return;
+
+    // Toggle content visibility
+    const items = container.querySelectorAll('.group-item');
+    items.forEach(item => {
+        item.style.display = isExpanded ? 'none' : '';
+    });
+
+    // Update all header icons in this container
+    const headers = container.querySelectorAll('.group-header');
+    headers.forEach(header => {
+        const icon = header.querySelector('.group-toggle-icon');
+        if (icon) {
+            icon.innerText = isExpanded ? '▶' : '▼';
+        }
+    });
+}
+
+function toggleSpecificGroup(groupId, headerEl) {
+    const items = document.querySelectorAll(`.${groupId}`);
+    const icon = headerEl.querySelector('.group-toggle-icon');
+    let isCollapsed = false;
+    
+    items.forEach(item => {
+        if (item.style.display === 'none') {
+            item.style.display = ''; // Show
+            isCollapsed = false;
+        } else {
+            item.style.display = 'none'; // Hide
+            isCollapsed = true;
+        }
+    });
+    
+    if(icon) icon.innerText = isCollapsed ? '▶' : '▼';
+}
+
 // --- SAFETY GRID FILTER LOGIC (Cascading) ---
 // --- SAFETY GRID FILTER LOGIC (Robust) ---
 function updateSafetyFilters(source) {
@@ -3000,3 +3360,474 @@ function updateSafetyFilters(source) {
         locationSel.appendChild(opt);
     });
 }
+
+/* --- POSITIONAL CLEANING LOGIC --- */
+/* --- POSITIONAL CLEANING LOGIC --- */
+let positionalTemplateCache = null;
+
+async function ensurePositionalCache() {
+    if (positionalTemplateCache && positionalTemplateCache.length > 0) return;
+    const loadText = document.getElementById('loadingText');
+    if(loadText) loadText.innerText = "Discovering Templates...";
+    
+    // Strategy 1: Search for the specific icon prefix
+    let templates = await fetchTemplatesBySearch("🟪");
+    
+    // Strategy 2: Search for "Positional"
+    if (templates.length === 0) {
+        templates = await fetchTemplatesBySearch("Positional");
+    }
+    
+    // Strategy 3: Fetch all and filter client-side (Highest reliability)
+    if (templates.length === 0) {
+        console.log("Strict search failed. Fetching all active templates...");
+        const allActive = await fetchTemplatesBySearch(""); 
+        templates = allActive.filter(t => 
+            t.title.includes("🟪") || 
+            t.title.toLowerCase().includes("positional")
+        );
+    }
+    
+    positionalTemplateCache = templates;
+    console.log("Positional Cache Built:", positionalTemplateCache.map(t => t.title));
+}
+
+async function fetchTemplatesBySearch(searchStr) {
+    // We need a context location to search for templates. Use the first available one.
+    if (!locationsCache || locationsCache.length === 0) {
+        console.warn("No locations available to fetch templates.");
+        return [];
+    }
+    const contextLocId = locationsCache[0].id;
+
+    const query = `
+        query FindTemplates($filter: ListTemplatesFilter, $mode: ModeInput!) {
+            listTemplates(filter: $filter, mode: $mode) {
+                id
+                title
+                itemTemplates {
+                    id
+                    text
+                }
+            }
+        }
+    `;
+    const vars = {
+        mode: { mode: "LOCATION", id: contextLocId },
+        filter: {
+            isActive: true
+        }
+    };
+    if (searchStr) vars.filter.searchString = searchStr;
+    
+    try {
+        const data = await joltFetch(query, vars);
+        // The return type of listTemplates is a List of ListTemplate objects, not a connection with edges/node
+        // based on the schema definition I saw: type: { kind: "LIST", ofType: { kind: "OBJECT", name: "ListTemplate" } }
+        return data.data?.listTemplates || [];
+    } catch(e) {
+        console.error("Template Fetch Error:", e);
+        return [];
+    }
+}
+
+function updatePosGridHierarchy(source) {
+    const marketSel = document.getElementById('posMarketFilter');
+    const districtSel = document.getElementById('posDistrictFilter');
+    const locationSel = document.getElementById('posLocationFilter');
+    
+    const selectedMarket = marketSel ? marketSel.value : "";
+    const selectedDistrict = districtSel ? districtSel.value : "";
+    
+    if (source === 'market') {
+        districtSel.innerHTML = '<option value="">All Districts</option>';
+        const availableDistricts = new Set();
+        locationsCache.forEach(loc => {
+            const meta = getMetaForLoc(loc);
+            if (meta && meta.market === selectedMarket) {
+                if (meta.district) availableDistricts.add(meta.district);
+            }
+        });
+        Array.from(availableDistricts).sort().forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d; opt.textContent = d; districtSel.appendChild(opt);
+        });
+        districtSel.value = "";
+    }
+
+    // Update Locations
+    locationSel.innerHTML = '<option value="">All Locations</option>';
+    let filteredLocs = locationsCache.filter(loc => {
+        const meta = getMetaForLoc(loc);
+        if (!meta) return true;
+        if (selectedMarket && meta.market !== selectedMarket) return false;
+        if (selectedDistrict && meta.district !== selectedDistrict) return false;
+        return true;
+    });
+    
+    filteredLocs.sort((a,b) => a.name.localeCompare(b.name));
+    filteredLocs.forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc.id; opt.textContent = loc.name; locationSel.appendChild(opt);
+    });
+}
+
+async function loadPositionalCleaningGrid() {
+    const overlay = document.getElementById('loadingOverlay');
+    const loadText = document.getElementById('loadingText');
+    const tableHead = document.querySelector('#posTable thead tr');
+    const tableBody = document.querySelector('#posTable tbody');
+    
+    overlay.style.display = 'flex';
+    loadText.innerText = "Initializing...";
+    
+    // 1. Ensure Cache
+    await ensurePositionalCache();
+    
+    // 2. Determine Target Template
+    const selectedDay = document.getElementById('posDayFilter').value;
+    const selectedDP = document.getElementById('posDaypartFilter').value;
+    
+    // Map full day name to short name used in titles
+    const dayMap = {
+        "Monday": "Mon",
+        "Tuesday": "Tues",
+        "Wednesday": "Wed",
+        "Thursday": "Thurs",
+        "Friday": "Fri",
+        "Saturday": "Sat",
+        "Sunday": "Sun"
+    };
+    const shortDay = dayMap[selectedDay] || selectedDay;
+    
+    const targetTemplate = positionalTemplateCache.find(t => {
+        const title = (t.title || "");
+        // Match "Positional", the short day, and the daypart range
+        const hasPositional = title.includes("Positional");
+        const hasDay = title.includes(`| ${shortDay} |`) || title.includes(`|${shortDay}|`);
+        const hasDP = title.includes(selectedDP);
+        
+        return hasPositional && hasDay && hasDP;
+    });
+    
+    if (!targetTemplate) {
+        // Fallback: looser match if strict pipe-matching fails
+        const looseTemplate = positionalTemplateCache.find(t => {
+            const title = t.title.toLowerCase();
+            return title.includes(shortDay.toLowerCase()) && title.includes(selectedDP.toLowerCase());
+        });
+        
+        if (looseTemplate) {
+            targetTemplate = looseTemplate;
+        } else {
+            const availableTitles = positionalTemplateCache.map(t => t.title).join("\n");
+            alert(`No template found matching "${selectedDay}" (${shortDay}) and "${selectedDP}".\n\nAvailable Templates:\n${availableTitles}`);
+            overlay.style.display = 'none';
+            tableBody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">Template not found.</td></tr>';
+            return;
+        }
+    }
+    
+    // 3. Setup Columns
+    let columns = targetTemplate.itemTemplates || [];
+    
+    // Filter out "initials"
+    columns = columns.filter(col => !col.text.toLowerCase().includes("initials"));
+
+    tableHead.innerHTML = '<th style="position:sticky; left:0; background:white; z-index:10; border-right:2px solid #e2e8f0; padding:12px;">Site Name</th>';
+    
+    columns.forEach(col => {
+        const th = document.createElement('th');
+        
+        // Clean and Format Header
+        let rawText = col.text.replace(/#/g, '').trim();
+        let headerContent = rawText;
+        
+        // Extract Position (**Position** Task)
+        const parts = rawText.split('**').filter(s => s.trim().length > 0);
+        if (parts.length >= 2) {
+            // parts[0] is typically Position, parts[1] is Task (or vice versa depending on exact string)
+            // User said: "text between ** is position, last part is task" -> "**Position** Task" -> ["Position", " Task"]
+            const position = parts[0].trim();
+            const task = parts.slice(1).join(" ").trim();
+            headerContent = `<div style="line-height:1.2;"><span style="color:#64748b; font-weight:bold; font-size:0.7rem; text-transform:uppercase;">${position}</span><br><span style="color:#334155; font-size:0.8rem;">${task}</span></div>`;
+        } else {
+             // Fallback cleanup
+             headerContent = `<span style="color:#334155; font-size:0.8rem;">${rawText.replace(/\*\*/g, '')}</span>`;
+        }
+
+        th.innerHTML = headerContent;
+        th.style.minWidth = "120px"; // Slightly wider for 2 lines
+        th.style.padding = "8px 10px";
+        th.style.textAlign = "center";
+        th.style.verticalAlign = "bottom"; // Align task text to bottom
+        tableHead.appendChild(th);
+    });
+    
+    // 4. Fetch Data
+    const startDate = document.getElementById('posStartDate').value;
+    const endDate = document.getElementById('posEndDate').value;
+    const selMarket = document.getElementById('posMarketFilter').value;
+    const selDistrict = document.getElementById('posDistrictFilter').value;
+    const selLoc = document.getElementById('posLocationFilter').value;
+    
+    let targetLocs = locationsCache.filter(l => {
+        if (selLoc && l.id !== selLoc) return false;
+        const meta = getMetaForLoc(l);
+        if (!meta) return true;
+        if (selMarket && meta.market !== selMarket) return false;
+        if (selDistrict && meta.district !== selDistrict) return false;
+        return true;
+    });
+    
+    loadText.innerText = `Fetching Data for ${targetLocs.length} locations...`;
+    
+    const locationIds = targetLocs.map(l => l.id);
+    // Convert to Seconds (Int32) for GraphQL
+    const startTs = Math.floor(new Date(startDate).getTime() / 1000);
+    const endTs = Math.floor(new Date(endDate).setHours(23,59,59,999) / 1000);
+    
+    const query = `
+        query GetPositionalLists($filter: ListInstancesFilter!) {
+            listInstances(filter: $filter) {
+                id
+                location { id }
+                createTimestamp
+                completionTimestamp
+                itemResults {
+                    resultValue
+                    resultCompanyFiles {
+                        fileURI
+                    }
+                    itemTemplate {
+                        id
+                    }
+                }
+            }
+        }
+    `;
+    
+    const variables = {
+        filter: {
+            locationIds: locationIds, // Overwritten by chunks
+            listTemplateIds: [targetTemplate.id],
+            displayAfterTimestamp: startTs,
+            displayBeforeTimestamp: endTs,
+            completionStatus: "COMPLETE"
+        }
+    };
+    
+    let allLists = [];
+    try {
+        const chunkedLocs = [];
+        const chunkSize = 50;
+        for (let i=0; i<locationIds.length; i+=chunkSize) {
+            chunkedLocs.push(locationIds.slice(i, i+chunkSize));
+        }
+        
+        for (const chunk of chunkedLocs) {
+            const vars = { ...variables, filter: { ...variables.filter, locationIds: chunk } };
+            const data = await joltFetch(query, vars);
+            if (data.data?.listInstances) {
+                allLists = allLists.concat(data.data.listInstances);
+            }
+        }
+    } catch(e) {
+        console.error(e);
+        alert("Error fetching data. See console.");
+        overlay.style.display = 'none';
+        return;
+    }
+    
+    // 5. Aggregate
+    const siteMap = {}; // locId -> list
+    allLists.sort((a,b) => b.completionTimestamp - a.completionTimestamp); // Newest first
+    allLists.forEach(list => {
+        // Map location object to locationId for compatibility
+        const locId = list.location ? list.location.id : null;
+        if (locId && !siteMap[locId]) siteMap[locId] = list;
+    });
+    
+    // 6. Render
+    tableBody.innerHTML = '';
+    targetLocs.sort((a,b) => a.name.localeCompare(b.name));
+    
+        targetLocs.forEach(loc => {
+        const tr = document.createElement('tr');
+        const tdName = document.createElement('td');
+        tdName.innerHTML = `<strong>${loc.name}</strong>`;
+        tdName.style.position = "sticky";
+        tdName.style.left = "0";
+        tdName.style.background = "white";
+        tdName.style.zIndex = "5";
+        tdName.style.borderRight = "2px solid #e2e8f0";
+        tdName.style.padding = "10px";
+        tr.appendChild(tdName);
+        
+                const list = siteMap[loc.id];
+                
+                // Get Site Number from Meta and clean Store Name to avoid duplication
+                const meta = getMetaForLoc(loc);
+                const siteNum = meta ? meta.site : "";
+                let cleanStoreName = loc.name;
+                
+                if (siteNum && cleanStoreName.includes(siteNum)) {
+                    // Remove the number and any leading dashes/spaces if it's at the start
+                    cleanStoreName = cleanStoreName.replace(siteNum, '').trim();
+                    if (cleanStoreName.startsWith('-')) cleanStoreName = cleanStoreName.substring(1).trim();
+                }
+                
+                const displaySite = siteNum ? `Site ${siteNum} ${cleanStoreName}` : loc.name;
+        
+                // Build Gallery for this site
+                const siteGallery = [];
+                if (list && list.itemResults) {
+                    list.itemResults.forEach(ir => {
+                        if (ir.resultCompanyFiles && ir.resultCompanyFiles.length > 0 && ir.resultCompanyFiles[0].fileURI) {
+                            const rawText = (ir.itemTemplate?.text || "").replace(/#/g, '').trim();
+                            const parts = rawText.split('**').filter(s => s.trim().length > 0);
+                            let position = "";
+                            let task = "";
+                            if (parts.length >= 2) {
+                                position = parts[0].trim();
+                                task = parts.slice(1).join(" ").trim();
+                            } else {
+                                task = rawText.replace(/\*\*/g, '');
+                            }
+                            
+                            siteGallery.push({ 
+                                url: ir.resultCompanyFiles[0].fileURI, 
+                                position: position,
+                                task: task,
+                                siteName: displaySite
+                            });
+                        }
+                    });
+                }        columns.forEach(col => {
+            const td = document.createElement('td');
+            td.style.textAlign = "center";
+            td.style.padding = "10px";
+            
+            if (list && list.itemResults) {
+                const item = list.itemResults.find(i => i.itemTemplate && i.itemTemplate.id === col.id);
+                if (item) {
+                    if (item.resultCompanyFiles && item.resultCompanyFiles.length > 0 && item.resultCompanyFiles[0].fileURI) {
+                        const url = item.resultCompanyFiles[0].fileURI;
+                        
+                        const img = document.createElement('img');
+                        img.src = url;
+                        img.style.cssText = "width:80px; height:80px; object-fit:cover; border-radius:4px; cursor:pointer; border:1px solid #ccc;";
+                        
+                        // Find the gallery item for this specific image to start at correct index
+                        const galleryItem = siteGallery.find(g => g.url === url);
+                        img.onclick = () => openPhoto(url, galleryItem ? (galleryItem.task || galleryItem.position) : '', siteGallery);
+                        
+                        td.appendChild(img);
+                    } else if (item.resultValue === "true" || item.resultValue === "1" || item.resultValue === "Pass") {
+                        td.innerHTML = `<span style="color:green; font-weight:bold;">✔</span>`;
+                    } else if (item.resultValue) {
+                         td.innerText = item.resultValue;
+                    }
+                } else {
+                    td.innerHTML = `<span style="color:#eee;">-</span>`;
+                }
+            } else {
+                 td.innerHTML = `<span style="color:#eee;">-</span>`;
+            }
+            tr.appendChild(td);
+        });
+        tableBody.appendChild(tr);
+    });
+    
+    if (targetLocs.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="100%" style="text-align:center;">No locations found.</td></tr>';
+    }
+    
+    overlay.style.display = 'none';
+
+
+}
+/* --- PHOTO GALLERY LOGIC --- */
+let currentPhotoGallery = [];
+let currentPhotoIndex = 0;
+
+function renderCurrentPhoto() {
+    const modal = document.getElementById('photoModal');
+    const title = document.getElementById('photoTitle');
+    const captionEl = document.getElementById('photoCaption');
+    const counterEl = document.getElementById('photoCounter');
+    const container = document.getElementById('photoContainer');
+    const btnPrev = document.getElementById('photoPrev');
+    const btnNext = document.getElementById('photoNext');
+
+    if (!currentPhotoGallery[currentPhotoIndex]) return;
+    const item = currentPhotoGallery[currentPhotoIndex];
+
+    container.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = item.url;
+    img.style.maxWidth = "100%";
+    img.style.maxHeight = "65vh"; // Slightly shorter to make room for top labels
+    img.style.borderRadius = "8px";
+    img.style.display = "block";
+    img.style.margin = "0 auto";
+    container.appendChild(img);
+
+    // Site Number and Name
+    title.innerText = item.siteName || "Photo Detail";
+    
+    if (captionEl) {
+        let captionHtml = '<div style="text-align:center;">';
+        
+        // Position (e.g., FRIES) - matching grid header style but slightly larger
+        if (item.position) {
+            captionHtml += `<div style="color:#64748b; font-weight:800; font-size:0.85rem; text-transform:uppercase; letter-spacing:0.05em; line-height:1;">${item.position}</div>`;
+        }
+        
+        // Task (e.g., Fry carton holders)
+        const taskText = item.task || item.caption || '';
+        captionHtml += `<div style="color:#1e293b; font-size:1.1rem; font-weight:600; margin-top:2px;">${taskText}</div>`;
+        captionHtml += '</div>';
+        
+        captionEl.innerHTML = captionHtml;
+    }
+
+    if (counterEl) {
+        counterEl.innerText = `Photo ${currentPhotoIndex + 1} of ${currentPhotoGallery.length}`;
+    }
+
+    // Show/Hide Nav
+    if (btnPrev) btnPrev.style.visibility = (currentPhotoGallery.length > 1) ? 'visible' : 'hidden';
+    if (btnNext) btnNext.style.visibility = (currentPhotoGallery.length > 1) ? 'visible' : 'hidden';
+}
+
+function openPhoto(url, caption, gallery = []) {
+    const modal = document.getElementById('photoModal');
+    
+    // Setup Gallery
+    if (gallery && gallery.length > 0) {
+        currentPhotoGallery = gallery;
+        currentPhotoIndex = gallery.findIndex(item => item.url === url);
+        if (currentPhotoIndex === -1) currentPhotoIndex = 0;
+    } else {
+        currentPhotoGallery = [{ url, caption, siteName: "Photo Detail" }];
+        currentPhotoIndex = 0;
+    }
+
+    renderCurrentPhoto();
+    modal.style.display = 'flex';
+}
+
+function navigatePhoto(dir) {
+    if (currentPhotoGallery.length <= 1) return;
+    currentPhotoIndex += dir;
+    if (currentPhotoIndex < 0) currentPhotoIndex = currentPhotoGallery.length - 1;
+    if (currentPhotoIndex >= currentPhotoGallery.length) currentPhotoIndex = 0;
+    
+    renderCurrentPhoto();
+}
+
+function closePhoto() {
+    document.getElementById('photoModal').style.display = 'none';
+}
+function printAuditDetail() {    expandAllSublists();    setTimeout(() => {        window.print();    }, 500);}

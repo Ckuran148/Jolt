@@ -80,6 +80,7 @@ body {
 }
 
 .nav-btn:hover { background: rgba(255,255,255,0.05); }
+.logout-btn:hover { background: rgba(248, 113, 113, 0.1) !important; }
 .nav-btn.active {
     background: var(--primary);
     color: white;
@@ -716,6 +717,11 @@ body {
 .cell-manual { 
     background-color: #ffffcc !important; /* Light Yellow */
 }
+.cell-na {
+    background-color: #e2e3e5 !important; /* Gray */
+    color: #555;
+    font-style: italic;
+}
 
 @media print {
     /* Ensure the yellow background prints */
@@ -723,6 +729,11 @@ body {
         -webkit-print-color-adjust: exact; 
         print-color-adjust: exact; 
         background-color: #ffffcc !important; 
+    }
+    .cell-na {
+        -webkit-print-color-adjust: exact; 
+        print-color-adjust: exact; 
+        background-color: #e2e3e5 !important; 
     }
 }
 
