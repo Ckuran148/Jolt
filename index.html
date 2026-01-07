@@ -29,6 +29,9 @@
                 <button id="nav-inspector" class="nav-btn active" onclick="switchTab('inspector')">
                     <span class="icon">📋</span> <span class="label">List Inspector</span>
                 </button>
+                <button id="nav-positional" class="nav-btn" onclick="switchTab('positional')">
+                    <span class="icon">🧹</span> <span class="label">Positional Cleaning</span>
+                </button>
             </div>
 
             <!-- SECTION 2: FOOD SAFETY -->
@@ -69,14 +72,9 @@
         </nav>
 
         <div class="sidebar-footer">
-    <button onclick="handleLogout()" class="config-trigger" style="
-    background-color: #fff; 
-    color: #dc2626; 
-    border: 1px solid #dc2626; 
-    margin-bottom: 10px; 
-    font-weight: bold;">
-    🚪 Log Out
-</button>
+    <button onclick="handleLogout()" class="nav-btn logout-btn" style="margin-bottom: 10px;">
+        <span class="icon" style="opacity: 0.8;">🚪</span> <span class="label">Log Out</span>
+    </button>
     
     <button onclick="document.getElementById('configModal').style.display='flex'" class="config-trigger">
         ⚙️ Settings
@@ -164,16 +162,93 @@
 </div>
 
 
+        <!-- VIEW: POSITIONAL CLEANING -->
+<div id="tab-positional" class="view-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>Positional Cleaning</h2>
+        </div>
+
+        <div class="controls-bar">
+            <div class="filter-content">
+                <div class="control-group">
+                    <label>Start Date</label>
+                    <input type="date" id="posStartDate">
+                </div>
+                <div class="control-group">
+                    <label>End Date</label>
+                    <input type="date" id="posEndDate">
+                </div>
+
+                <div class="control-group">
+                    <label>Market</label>
+                    <select id="posMarketFilter" onchange="updatePosGridHierarchy('market')">
+                        <option value="">All Markets</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>District</label>
+                    <select id="posDistrictFilter" onchange="updatePosGridHierarchy('district')">
+                        <option value="">All Districts</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>Location</label>
+                    <select id="posLocationFilter">
+                        <option value="">All Locations</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label>Day</label>
+                    <select id="posDayFilter">
+                        <option value="Monday">Monday</option>
+                        <option value="Tuesday">Tuesday</option>
+                        <option value="Wednesday">Wednesday</option>
+                        <option value="Thursday">Thursday</option>
+                        <option value="Friday">Friday</option>
+                        <option value="Saturday">Saturday</option>
+                        <option value="Sunday">Sunday</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>Daypart</label>
+                    <select id="posDaypartFilter">
+                        <option value="DP 1-3">DP 1-3</option>
+                        <option value="DP 4-6">DP 4-6</option>
+                    </select>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn-primary" onclick="loadPositionalCleaningGrid()">Load Grid</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="modern-table" id="posTable">
+                <thead>
+                    <tr>
+                        <th>Site Name</th>
+                        <!-- Dynamic Columns will be injected here -->
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td colspan="100%" style="text-align:center; padding:30px;">Select filters and click Load Grid.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div> 
+</div>
+
         <!-- VIEW 2: DFSL GRID (Renamed) -->
 <div id="tab-grid" class="view-content">
     <div class="card">
         <div class="card-header">
             <h2>DFSL Grid</h2>
-            <div class="legend-box hide-mobile" style="margin-right: auto; margin-left: 20px;">
-                <span class="legend-item">⏱️ Duration</span>
-                <span class="legend-item">🛡️ Integrity</span>
-                <span class="legend-item">⚠️ Corrective Action</span>
-            </div>
         </div>
         <div class="controls-bar">
             <details open class="filter-toggle">
@@ -203,6 +278,13 @@
                         <select id="gridLocationFilter">
                             <option value="">All Locations</option>
                         </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label>&nbsp;</label> <div style="display:flex; align-items:center; gap:10px; height:38px;"><label style="cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; font-weight:600; color:#334155;">
+                            <input type="checkbox" id="gridGroupToggle" style="margin:0; min-width:auto; width:auto;"> Group By Org
+                        </label>
+                        <button id="gridCollapseBtn" class="btn-secondary" style="display:none; padding:4px 8px; font-size:0.75rem;" onclick="toggleGroupCollapse('grid')">Collapse All</button></div>
                     </div>
 
                     <div class="button-group">
@@ -239,6 +321,7 @@
             <div class="card">
                 <div class="card-header">
                     <h2>Safety Audit Grid</h2>
+                    <span id="safetyGridLastRefreshed" style="font-size: 0.8rem; color: #666;"></span>
                 </div>
                 <div class="controls-bar">
                     <details open class="filter-toggle">
@@ -268,6 +351,13 @@
     <select id="safetyLocationFilter">
         <option value="">All Locations</option>
     </select>
+</div>
+
+<div class="control-group">
+    <label>&nbsp;</label> <div style="display:flex; align-items:center; gap:10px; height:38px;"><label style="cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; font-weight:600; color:#334155;">
+        <input type="checkbox" id="safetyGroupToggle" style="margin:0; min-width:auto; width:auto;"> Group By Org
+    </label>
+    <button id="safetyCollapseBtn" class="btn-secondary" style="display:none; padding:4px 8px; font-size:0.75rem;" onclick="toggleGroupCollapse('safety')">Collapse All</button></div>
 </div>
     <div class="button-group">
         <button class="btn-primary" onclick="loadSafetyGrid()">Load Grid</button>
@@ -348,7 +438,7 @@
                             </div>
                             <div class="button-group">
     <button class="btn-primary" onclick="fetchAudits()">View Audits</button>
-    <button class="btn-secondary" onclick="window.print()">Print</button>
+    <button class="btn-secondary" onclick="printAuditDetail()">Print</button>
 </div>
                         </div>
                     </details>
@@ -374,6 +464,7 @@
     <div class="card">
         <div class="card-header">
             <h2>Probe & Sensor Report</h2>
+            <span id="probeGridLastRefreshed" style="font-size: 0.8rem; color: #666;"></span>
         </div>
         <div class="controls-bar">
             <details open class="filter-toggle">
@@ -485,6 +576,12 @@
                         <option value="">All Districts</option>
                     </select>
                 </div>
+                <div class="control-group">
+                    <label>&nbsp;</label> <div style="display:flex; align-items:center; gap:10px; height:38px;"><label style="cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; font-weight:600; color:#334155;">
+                        <input type="checkbox" id="sensorGroupToggle" style="margin:0; min-width:auto; width:auto;"> Group By Org
+                    </label>
+                    <button id="sensorCollapseBtn" class="btn-secondary" style="display:none; padding:4px 8px; font-size:0.75rem;" onclick="toggleGroupCollapse('sensor')">Collapse All</button></div>
+                </div>
                 <div class="button-group">
                     <button class="btn-primary" onclick="loadSensorsGrid()">Load Sensors</button>
                 </div>
@@ -528,7 +625,25 @@
 </div>
 
 <!-- MODALS -->
-<div id="photoModal"><div class="photo-content"><button class="close-photo" onclick="closePhoto()">Close</button><h3 id="photoTitle">Photo Details</h3><div class="photo-placeholder"><span>Image Preview Unavailable via API</span></div><p id="photoCaption" style="font-family:monospace; color:#333; word-break:break-all;"></p></div></div>
+<div id="photoModal" onclick="if(event.target === this) closePhoto()">
+    <div class="photo-content" onclick="event.stopPropagation()">
+        <button class="close-photo" onclick="closePhoto()">Close</button>
+        <h3 id="photoTitle" style="margin-bottom:5px;">Photo Details</h3>
+        <div id="photoCaption" style="margin-bottom:15px;"></div>
+        
+        <div style="position:relative; display:flex; align-items:center; justify-content:center; min-height:300px;">
+            <button id="photoPrev" onclick="navigatePhoto(-1)" style="position:absolute; left:-50px; background:rgba(255,255,255,0.2); color:white; border:none; font-size:2rem; cursor:pointer; padding:10px; border-radius:50%; width:50px; height:50px; display:flex; align-items:center; justify-content:center;">‹</button>
+            
+            <div id="photoContainer">
+                <!-- Image injected here -->
+            </div>
+            
+            <button id="photoNext" onclick="navigatePhoto(1)" style="position:absolute; right:-50px; background:rgba(255,255,255,0.2); color:white; border:none; font-size:2rem; cursor:pointer; padding:10px; border-radius:50%; width:50px; height:50px; display:flex; align-items:center; justify-content:center;">›</button>
+        </div>
+        
+        <div id="photoCounter" style="color:#94a3b8; font-size:0.75rem; margin-top:15px; border-top:1px solid #eee; padding-top:8px;"></div>
+    </div>
+</div>
 
 <!-- SENSOR DETAIL MODAL -->
 <div id="sensorDetailModal" class="modal" style="display:none; position:fixed; z-index:9000; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center;">

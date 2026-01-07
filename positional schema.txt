@@ -1,0 +1,284 @@
+Operation:
+
+query AllListInstances($filter: ListInstancesFilter!, $mode: ModeInput!) {
+  allListInstances(filter: $filter, mode: $mode) {
+    edges {
+      node {
+        listTemplate {
+          id
+          title
+        }
+        location {
+          name
+        }
+        id
+        itemResults {
+          id
+          location {
+            name
+          }
+          
+          type
+          
+          
+          resultText
+          
+          
+          resultCompanyFiles {
+            fileURI
+          }
+          itemTemplate {
+            text
+          }
+        }
+        
+      }
+    }
+  }
+}
+
+Variables:
+
+{
+  "mode": {
+    "mode": "CONTENT_GROUP",
+    "id": "Q29udGVudEdyb3VwOjAwMDU4NzViMjYwZDRjNmI2NDdhNjBjZDAxNDFlZDU2"
+  },
+  
+  
+  "filter": {
+    "displayAfterTimestamp": 1766282446,
+    "displayBeforeTimestamp": 1767146446,
+    "listTemplateId": "TGlzdFRlbXBsYXRlOjExZWVmYjk0ZTU5NjJjZTA5NDdjOTY4OGI5NjI5NDli"
+  }
+  
+}
+
+
+
+response:
+
+{
+          "node": {
+            "listTemplate": {
+              "id": "TGlzdFRlbXBsYXRlOjExZWVmYjk0ZTU5NjJjZTA5NDdjOTY4OGI5NjI5NDli",
+              "title": "🟪Positional | Tues | DP 4-6"
+            },
+            "location": {
+              "name": "3583"
+            },
+            "id": "TGlzdEluc3RhbmNlOjExZjBlNTJkYjYxNDdiNTBhOWYwMzhjOTg2MmMzZWY3",
+            "itemResults": [
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjZjYTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "SUBTITLE",
+                "resultText": null,
+                "resultCompanyFiles": [],
+                "itemTemplate": {
+                  "text": "DAYPART 4-6"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTQ3YjUxYTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "PHOTO",
+                "resultText": null,
+                "resultCompanyFiles": [
+                  {
+                    "fileURI": "https://joltup.s3.us-east-1.amazonaws.com/lists/0005875b260d4c6a9c965f4e5e59b569/11f0e5e774ef95f08ea3df5a4066e4c1.jpg.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=AKIAIPU53DLGPFPWVW7Q%2F20260107%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260107T065228Z&X-Amz-Expires=604800&X-Amz-Signature=caa65af925d6ca0825c902921c32578ca97ef0e53a4e211a8c1cebf725d80ee6&X-Amz-SignedHeaders=host&x-id=GetObject"
+                  }
+                ],
+                "itemTemplate": {
+                  "text": "# **FRONT REGISTER**   \nSTORAGE BINS ON FRONT LINE"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTQ3YjUyYTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "SHORT_ENTRY",
+                "resultText": " ",
+                "resultCompanyFiles": [],
+                "itemTemplate": {
+                  "text": "FRONT REGISTER INITIALS"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjYwYTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "PHOTO",
+                "resultText": null,
+                "resultCompanyFiles": [
+                  {
+                    "fileURI": "https://joltup.s3.us-east-1.amazonaws.com/lists/0005875b260d4c6a9c965f4e5e59b569/11f0e5e778925f308ea3df5a4066e4c1.jpg.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=AKIAIPU53DLGPFPWVW7Q%2F20260107%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260107T065228Z&X-Amz-Expires=604800&X-Amz-Signature=b44198619becc3464b2d015cc5ff5fd9b7796a7c2783b9045cd80d9114e39a18&X-Amz-SignedHeaders=host&x-id=GetObject"
+                  }
+                ],
+                "itemTemplate": {
+                  "text": "# **PUW REGISTER**   \nDRY STORAGE SHELVES"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjYxYTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "SHORT_ENTRY",
+                "resultText": " ",
+                "resultCompanyFiles": [],
+                "itemTemplate": {
+                  "text": "PUW REGISTER INITIALS"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjYyYTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "PHOTO",
+                "resultText": null,
+                "resultCompanyFiles": [
+                  {
+                    "fileURI": "https://joltup.s3.us-east-1.amazonaws.com/lists/0005875b260d4c6a9c965f4e5e59b569/11f0e5e77ca43df08ea3df5a4066e4c1.jpg.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=AKIAIPU53DLGPFPWVW7Q%2F20260107%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260107T065228Z&X-Amz-Expires=604800&X-Amz-Signature=d4f8f03fd81d941dbfcc8e392fed8fe89e8e57b23bc4d513f4f9adcd3a62f86f&X-Amz-SignedHeaders=host&x-id=GetObject"
+                  }
+                ],
+                "itemTemplate": {
+                  "text": "# **GRILL**    \nCHICKEN FRYER DOOR: INSIDE AND OUT"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjYzYTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "SHORT_ENTRY",
+                "resultText": " ",
+                "resultCompanyFiles": [],
+                "itemTemplate": {
+                  "text": "GRILL INITIALS"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjY0YTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "PHOTO",
+                "resultText": null,
+                "resultCompanyFiles": [
+                  {
+                    "fileURI": "https://joltup.s3.us-east-1.amazonaws.com/lists/0005875b260d4c6a9c965f4e5e59b569/11f0e5e77eb89f008ea3df5a4066e4c1.jpg.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=AKIAIPU53DLGPFPWVW7Q%2F20260107%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260107T065228Z&X-Amz-Expires=604800&X-Amz-Signature=3691f66c8dc7d7c87763c50ff2b743aefae28999bf293bb4918bb2cd164fcb46&X-Amz-SignedHeaders=host&x-id=GetObject"
+                  }
+                ],
+                "itemTemplate": {
+                  "text": "# **SANDWICHES**   \nSANDWICH WRAP HOLDERS"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjY1YTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "SHORT_ENTRY",
+                "resultText": " ",
+                "resultCompanyFiles": [],
+                "itemTemplate": {
+                  "text": "SANDWICH INITIALS"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjY2YTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "PHOTO",
+                "resultText": null,
+                "resultCompanyFiles": [
+                  {
+                    "fileURI": null
+                  }
+                ],
+                "itemTemplate": {
+                  "text": "# **FRIES**   \nOIL DISCARD SHUTTLE / Filter pan"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjY3YTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "SHORT_ENTRY",
+                "resultText": " ",
+                "resultCompanyFiles": [],
+                "itemTemplate": {
+                  "text": "FRIES INITIAL"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjY4YTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "PHOTO",
+                "resultText": null,
+                "resultCompanyFiles": [
+                  {
+                    "fileURI": "https://joltup.s3.us-east-1.amazonaws.com/lists/0005875b260d4c6a9c965f4e5e59b569/11f0e5e78aca86a08ea3df5a4066e4c1.jpg.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=AKIAIPU53DLGPFPWVW7Q%2F20260107%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20260107T065228Z&X-Amz-Expires=604800&X-Amz-Signature=556907b6ef467ecad022005e97abd872df43487e0f7cc7857a33b8c74010473b&X-Amz-SignedHeaders=host&x-id=GetObject"
+                  }
+                ],
+                "itemTemplate": {
+                  "text": "# **PUW COORDINATOR**   \nSALAD REACH-IN HINGES, HANDLES & LEGS"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjY5YTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "SHORT_ENTRY",
+                "resultText": " ",
+                "resultCompanyFiles": [],
+                "itemTemplate": {
+                  "text": "PUW COORD INITIALS"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjZhYTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "PHOTO",
+                "resultText": null,
+                "resultCompanyFiles": [
+                  {
+                    "fileURI": null
+                  }
+                ],
+                "itemTemplate": {
+                  "text": "# **DINING ROOM CLOSER**   \nDIVIDER WALLS IN CONDIMENT STAND BINS"
+                }
+              },
+              {
+                "id": "SXRlbVJlc3VsdDoxMWYwZTUyZGI2MTRhMjZiYTlmMDM4Yzk4NjJjM2VmNw==",
+                "location": {
+                  "name": "3583"
+                },
+                "type": "SHORT_ENTRY",
+                "resultText": " ",
+                "resultCompanyFiles": [],
+                "itemTemplate": {
+                  "text": "DINING ROOM CLOSER INITIALS"
+                }
+              }
+            ]
+          }
+        },
+
+
